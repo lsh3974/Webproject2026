@@ -27,6 +27,7 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/actuator/health/**"
                         ).permitAll()
+                        .requestMatchers("/seller/**").hasRole("SELLER")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
