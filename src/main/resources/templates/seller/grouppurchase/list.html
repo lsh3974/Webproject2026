@@ -15,6 +15,7 @@
         <div class="d-flex align-items-center gap-3">
             <a th:href="@{/seller/stores}" class="text-decoration-none text-secondary">매장 목록</a>
             <a th:href="@{/seller/stores/{id}/products(id=${store.id})}" class="text-decoration-none text-secondary">상품 관리</a>
+            <a th:href="@{/seller/stores/{id}/pickups(id=${store.id})}" class="text-decoration-none text-secondary">수령/QR 관리</a>
             <a th:href="@{/}" class="text-decoration-none text-secondary">홈으로</a>
         </div>
     </div>
@@ -36,7 +37,10 @@
                     등록된 상품으로 공동구매 캠페인을 개설하고 모집 상태를 관리하세요.
                 </p>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
+                <a th:href="@{/seller/stores/{id}/pickups(id=${store.id})}" class="btn btn-outline-dark">
+                    📷 매장 수령/QR 관리
+                </a>
                 <a th:href="@{/seller/stores/{id}/products(id=${store.id})}" class="btn btn-outline-secondary">
                     상품 목록 보기
                 </a>

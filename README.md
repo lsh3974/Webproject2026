@@ -32,6 +32,7 @@
 - 판매자 매장 등록 및 정보 수정 (소유권 검증 포함)
 - 판매자 상품 등록, 목록 조회, 정보 수정 및 판매상태 관리 (이미지 업로드 및 삭제 지원)
 - 판매자 공동구매 모집 등록, 초안 저장(DRAFT), 정식 게시(OPEN), 수정 및 삭제 관리
+- 판매자 매장 수령 관리, 상품 준비완료 처리 및 QR 코드/수령코드 스캔 확인
 
 역할별 접근 제한과 주문, 결제는 아직 구현되지 않았습니다.
 
@@ -95,8 +96,9 @@ Workbench에서 프로젝트 DB에 연결한 뒤 다음 파일을 순서대로 �
 2. `database/002-add-unique-nickname.sql`: 닉네임 중복 금지 제약 추가
 3. `database/003-create-stores-and-products.sql`: 매장 및 상품 테이블 생성
 4. `database/004-create-group-purchases.sql`: 공동구매 모집 테이블 생성
+5. `database/005-create-pickups.sql`: 매장 수령 및 QR 코드 관리 테이블 생성
 
-회원가입 및 매장/상품/공동구매 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
+회원가입 및 매장/상품/공동구매/수령 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
 파일을 GitHub에서 받는 것만으로 DB에 반영되지는 않습니다.
 
 - 이미 적용한 파일은 다시 실행하지 않습니다. 특히 002는 반복 실행 시 오류가 발생합니다.
@@ -367,3 +369,23 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - **1인당 제한 수량 선택 설정**: `limit_per_user`는 선택 사항(기본값 제한 없음/`NULL`)으로, 사재기 방지가 필요한 특가 상품에 한해 설정할 수 있습니다.
 - **양방향 일수 계산 UI**: 모집 기간과 매장 수령 기간 설정 시 일수(예: 3일간)를 입력하면 마감 일시가 자동 계산되고, 반대로 마감 일시를 직접 지정하면 몇 일 동안 진행되는지 자동으로 역계산되어 표시됩니다.
 - **상품 관리 탭 연동**: 상품 목록 화면(`/seller/stores/{storeId}/products`)에서 각 상품의 공동구매 상태(`미등록`, `공동구매 모집 초안`, `공동구매 모집중`, `공동구매 마감`)가 동적 버튼으로 표시됩니다.
+
+## 12. 매장 수령 관리 및 QR 코드 수령 확인 (11번 기능)
+
+### 지원 기능 및 엔드포인트
+
+| 기능 | HTTP 메서드 | 요청 주소 | 설명 |
+|---|---|---|---|
+| 수령 관리 화면 | GET | `/seller/stores/{storeId}/pickups` | 해당 매장의 전체 수령 목록, 카메라 QR 스캐너, 코드 직접 조회창 제공 |
+| 수령 코드 비동기 조회 | GET | `/seller/stores/{storeId}/pickups/api/lookup` | QR 스캔 성공 시 수령 건의 정보(상품, 고객, 수량, 상태)를 모달로 반환 |
+| 상품 준비완료 처리 | POST | `/seller/stores/{storeId}/pickups/{id}/ready` | 준비중(`PREPARING`) 상태를 수령대기/준비완료(`READY`) 상태로 변경 |
+| 수령 완료 처리 (목록) | POST | `/seller/stores/{storeId}/pickups/{id}/complete` | 고객에게 상품 인도 후 최종 수령완료(`PICKED_UP`) 처리 및 시각 기록 |
+| QR 스캔 수령 확정 | POST | `/seller/stores/{storeId}/pickups/scan-complete` | QR 스캔 모달에서 즉시 수령 완료 확정 처리 |
+| 테스트 수령건 발급 | POST | `/seller/stores/{storeId}/pickups/mock-create` | 8~10번(주문) 미구현 상태에서도 QR 스캔과 수령 흐름을 즉시 검증할 수 있는 개발용 기능 |
+
+### 주요 정책 및 검증 규칙
+
+- **수령 상태 흐름**: `PREPARING`(준비중) → `READY`(수령대기/준비완료) → `PICKED_UP`(수령완료).
+- **중복 수령 방지**: 이미 `PICKED_UP` 처리된 건은 재수령할 수 없으며, 수령 완료 시각(`picked_up_at`)이 DB에 기록됩니다.
+- **카메라 QR 스캔 & 수동 입력 지원**: 스마트폰 카메라 및 웹캠으로 구매자의 QR 코드를 비추면 자동 감지되며, 카메라를 쓸 수 없는 환경을 위해 15자리 수령 코드(`PK-YYYYMMDD-XXXX`) 직접 입력도 지원합니다.
+- **소유권 검증**: 타 매장의 수령 코드를 스캔하거나 조작할 수 없도록 `@AuthenticationPrincipal LoginUser` 기반의 매장 소유권 검증을 수행합니다.
