@@ -40,6 +40,14 @@ public class ProductService {
         return product;
     }
 
+    public Product getProductWithStoreAndOwnershipCheck(Long storeId, Long productId, Long sellerId) {
+        Product product = getProductWithOwnershipCheck(productId, sellerId);
+        if (!product.getStore().getId().equals(storeId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 매장에 속한 상품이 아닙니다.");
+        }
+        return product;
+    }
+
     @Transactional
     public Long createProduct(Long storeId, Long sellerId, ProductForm form) {
         Store store = storeService.getStoreWithOwnershipCheck(storeId, sellerId);
@@ -59,8 +67,8 @@ public class ProductService {
     }
 
     @Transactional
-    public void updateProduct(Long productId, Long sellerId, ProductForm form) {
-        Product product = getProductWithOwnershipCheck(productId, sellerId);
+    public void updateProduct(Long storeId, Long productId, Long sellerId, ProductForm form) {
+        Product product = getProductWithStoreAndOwnershipCheck(storeId, productId, sellerId);
         product.update(
                 form.getName().trim(),
                 form.getCategory().trim(),
@@ -73,14 +81,14 @@ public class ProductService {
     }
 
     @Transactional
-    public void updateProductStatus(Long productId, Long sellerId, Product.Status status) {
-        Product product = getProductWithOwnershipCheck(productId, sellerId);
+    public void updateProductStatus(Long storeId, Long productId, Long sellerId, Product.Status status) {
+        Product product = getProductWithStoreAndOwnershipCheck(storeId, productId, sellerId);
         product.updateStatus(status);
     }
 
     @Transactional
-    public void deleteProduct(Long productId, Long sellerId) {
-        Product product = getProductWithOwnershipCheck(productId, sellerId);
+    public void deleteProduct(Long storeId, Long productId, Long sellerId) {
+        Product product = getProductWithStoreAndOwnershipCheck(storeId, productId, sellerId);
         productRepository.delete(product);
     }
 }
