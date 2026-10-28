@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>로그인 | 시흥한바구니</title>
+
+    <link
+            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+            rel="stylesheet"
+            integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
+            crossorigin="anonymous">
+</head>
+<body class="bg-light">
+
+<main class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-5">
+            <a th:href="@{/}" class="text-success text-decoration-none">
+                ← 시흥한바구니 홈
+            </a>
+
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-body p-4">
+                    <h1 class="h3 mb-4">로그인</h1>
+
+                    <div th:if="${param.error != null}"
+                         class="alert alert-danger" role="alert">
+                        로그인할 수 없습니다.
+                        이메일·비밀번호 또는 계정 상태를 확인해주세요.
+                    </div>
+
+                    <div th:if="${param.logout != null}"
+                         class="alert alert-success" role="status">
+                        로그아웃되었습니다.
+                    </div>
+
+                    <form th:action="@{/login}" method="post">
+                        <div class="mb-3">
+                            <label for="email" class="form-label">
+                                이메일
+                            </label>
+                            <input type="email"
+                                   id="email"
+                                   name="email"
+                                   class="form-control"
+                                   autocomplete="username"
+                                   maxlength="255"
+                                   required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="password" class="form-label">
+                                비밀번호
+                            </label>
+                            <input type="password"
+                                   id="password"
+                                   name="password"
+                                   class="form-control"
+                                   autocomplete="current-password"
+                                   required>
+                        </div>
+
+                        <button type="submit"
+                                class="btn btn-success w-100">
+                            로그인
+                        </button>
+                    </form>
+
+                    <p class="text-center mt-3 mb-0">
+                        아직 회원이 아니신가요?
+                        <a th:href="@{/signup}">회원가입</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+</body>
+</html>
