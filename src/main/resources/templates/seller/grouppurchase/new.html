@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>공동구매 모집 등록 - 시흥한바구니</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+<body class="bg-light">
+
+<nav class="navbar bg-white border-bottom">
+    <div class="container">
+        <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
+        <a th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}" class="text-decoration-none text-secondary">
+            공동구매 목록으로
+        </a>
+    </div>
+</nav>
+
+<main class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-10 col-lg-8">
+            <div class="card border-0 shadow-sm p-4">
+                <span class="text-muted small" th:text="${store.name}">매장명</span>
+                <h1 class="h4 fw-bold mb-2 mt-1">새 공동구매 모집 등록</h1>
+                <p class="text-secondary small mb-4">
+                    공동구매 가격, 목표 수량, 모집 기간, 수령 조건을 설정하고 초안으로 저장하거나 바로 게시할 수 있습니다.
+                </p>
+
+                <div th:if="${#lists.isEmpty(products)}" class="alert alert-warning">
+                    <strong>등록된 상품이 없습니다!</strong> 공동구매 모집을 등록하려면 먼저 매장에 상품을 등록해주세요.
+                    <div class="mt-2">
+                        <a th:href="@{/seller/stores/{id}/products/new(id=${store.id})}" class="btn btn-sm btn-warning">
+                            상품 등록하러 가기
+                        </a>
+                    </div>
+                </div>
+
+                <form th:unless="${#lists.isEmpty(products)}"
+                      th:action="@{/seller/stores/{id}/group-purchases/new(id=${store.id})}"
+                      th:object="${groupPurchaseForm}" method="post">
+
+                    <!-- 전역 유효성 오류 표시 (기간/수량 비교 오류 등) -->
+                    <div th:if="${#fields.hasGlobalErrors() or #fields.hasErrors('maxQuantityValid') or #fields.hasErrors('recruitmentPeriodValid') or #fields.hasErrors('pickupPeriodValid') or #fields.hasErrors('pickupAfterStartValid')}"
+                         class="alert alert-danger small">
+                        <div th:if="${#fields.hasErrors('maxQuantityValid')}" th:errors="*{maxQuantityValid}"></div>
+                        <div th:if="${#fields.hasErrors('recruitmentPeriodValid')}" th:errors="*{recruitmentPeriodValid}"></div>
+                        <div th:if="${#fields.hasErrors('pickupPeriodValid')}" th:errors="*{pickupPeriodValid}"></div>
+                        <div th:if="${#fields.hasErrors('pickupAfterStartValid')}" th:errors="*{pickupAfterStartValid}"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="productId" class="form-label fw-semibold">대상 상품 선택 *</label>
+                        <select id="productId" th:field="*{productId}" class="form-select"
+                                th:classappend="${#fields.hasErrors('productId')} ? 'is-invalid' : ''">
+                            <option value="">-- 상품을 선택해주세요 --</option>
+                            <option th:each="p : ${products}"
+                                    th:value="${p.id}"
+                                    th:text="${p.name} + ' (정상가: ' + ${#numbers.formatInteger(p.regularPrice, 0, 'COMMA')} + '원 / 단위: ' + ${p.unit} + ')'">
+                            </option>
+                        </select>
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('productId')}" th:errors="*{productId}"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="title" class="form-label fw-semibold">공동구매 모집 제목 *</label>
+                        <input type="text" id="title" th:field="*{title}" class="form-control"
+                               th:classappend="${#fields.hasErrors('title')} ? 'is-invalid' : ''"
+                               placeholder="예: [주말특가] 산지직송 당도선별 부사 사과 1박스 공동구매">
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('title')}" th:errors="*{title}"></div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <label for="groupPrice" class="form-label fw-semibold">공동구매 가격 (원) *</label>
+                            <input type="number" id="groupPrice" th:field="*{groupPrice}" class="form-control" min="0" step="10"
+                                   th:classappend="${#fields.hasErrors('groupPrice')} ? 'is-invalid' : ''"
+                                   placeholder="예: 12000">
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('groupPrice')}" th:errors="*{groupPrice}"></div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label for="targetQuantity" class="form-label fw-semibold">목표 달성 수량 *</label>
+                            <input type="number" id="targetQuantity" th:field="*{targetQuantity}" class="form-control" min="1"
+                                   th:classappend="${#fields.hasErrors('targetQuantity')} ? 'is-invalid' : ''">
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('targetQuantity')}" th:errors="*{targetQuantity}"></div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label for="maxQuantity" class="form-label fw-semibold">최대 모집 수량 *</label>
+                            <input type="number" id="maxQuantity" th:field="*{maxQuantity}" class="form-control" min="1"
+                                   th:classappend="${#fields.hasErrors('maxQuantity')} ? 'is-invalid' : ''">
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('maxQuantity')}" th:errors="*{maxQuantity}"></div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label for="limitPerUser" class="form-label fw-semibold">1인당 제한 수량 (선택)</label>
+                            <input type="number" id="limitPerUser" th:field="*{limitPerUser}" class="form-control" min="1"
+                                   th:classappend="${#fields.hasErrors('limitPerUser')} ? 'is-invalid' : ''"
+                                   placeholder="미입력 시 제한없음">
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('limitPerUser')}" th:errors="*{limitPerUser}"></div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-white border rounded mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h2 class="h6 fw-bold mb-0">모집 기간 설정</h2>
+                            <span id="recruitmentSummaryBadge" class="badge bg-success-subtle text-success border border-success-subtle">
+                                시작일로부터 3일 동안 모집
+                            </span>
+                        </div>
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-5">
+                                <label for="startAt" class="form-label small fw-semibold">모집 시작 일시 *</label>
+                                <input type="datetime-local" id="startAt" th:field="*{startAt}" class="form-control"
+                                       th:classappend="${#fields.hasErrors('startAt')} ? 'is-invalid' : ''">
+                                <div class="invalid-feedback" th:if="${#fields.hasErrors('startAt')}" th:errors="*{startAt}"></div>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="recruitmentDays" class="form-label small fw-semibold text-success">모집 일수 (자동계산)</label>
+                                <div class="input-group">
+                                    <input type="number" id="recruitmentDays" class="form-control border-success" min="1" max="365" value="3">
+                                    <span class="input-group-text bg-success text-white">일간</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="endAt" class="form-label small fw-semibold">모집 마감 일시 *</label>
+                                <input type="datetime-local" id="endAt" th:field="*{endAt}" class="form-control"
+                                       th:classappend="${#fields.hasErrors('endAt')} ? 'is-invalid' : ''">
+                                <div class="invalid-feedback" th:if="${#fields.hasErrors('endAt')}" th:errors="*{endAt}"></div>
+                            </div>
+                        </div>
+                        <div class="d-flex flex-wrap align-items-center gap-1 mt-2">
+                            <span class="text-muted small me-1">빠른 기간 선택:</span>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-recruit-days" data-days="1">1일</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-recruit-days" data-days="2">2일</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-recruit-days" data-days="3">3일</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-recruit-days" data-days="5">5일</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-recruit-days" data-days="7">7일(1주)</button>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-white border rounded mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h2 class="h6 fw-bold mb-0">매장 수령 조건 및 기간 설정</h2>
+                            <span id="pickupSummaryBadge" class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                수령 시작일로부터 1일 동안 수령 가능
+                            </span>
+                        </div>
+                        <div class="row g-3 align-items-end mb-2">
+                            <div class="col-md-5">
+                                <label for="pickupStartAt" class="form-label small fw-semibold">수령 가능 시작 일시 *</label>
+                                <input type="datetime-local" id="pickupStartAt" th:field="*{pickupStartAt}" class="form-control"
+                                       th:classappend="${#fields.hasErrors('pickupStartAt')} ? 'is-invalid' : ''">
+                                <div class="invalid-feedback" th:if="${#fields.hasErrors('pickupStartAt')}" th:errors="*{pickupStartAt}"></div>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="pickupDays" class="form-label small fw-semibold text-primary">수령 일수 (자동계산)</label>
+                                <div class="input-group">
+                                    <input type="number" id="pickupDays" class="form-control border-primary" min="1" max="365" value="1">
+                                    <span class="input-group-text bg-primary text-white">일간</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="pickupEndAt" class="form-label small fw-semibold">수령 가능 마감 일시 *</label>
+                                <input type="datetime-local" id="pickupEndAt" th:field="*{pickupEndAt}" class="form-control"
+                                       th:classappend="${#fields.hasErrors('pickupEndAt')} ? 'is-invalid' : ''">
+                                <div class="invalid-feedback" th:if="${#fields.hasErrors('pickupEndAt')}" th:errors="*{pickupEndAt}"></div>
+                            </div>
+                        </div>
+                        <div class="d-flex flex-wrap align-items-center gap-1 mb-3">
+                            <span class="text-muted small me-1">빠른 기간 선택:</span>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-pickup-days" data-days="1">1일</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-pickup-days" data-days="2">2일</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-pickup-days" data-days="3">3일</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-pickup-days" data-days="5">5일</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 quick-pickup-days" data-days="7">7일</button>
+                        </div>
+                        <div>
+                            <label for="pickupNotice" class="form-label small fw-semibold">수령 조건 및 안내사항</label>
+                            <input type="text" id="pickupNotice" th:field="*{pickupNotice}" class="form-control"
+                                   placeholder="예: 매장 카운터에서 QR/수령코드 제시 후 수령 (장바구니 지참 권장)">
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="description" class="form-label fw-semibold">공동구매 상세 안내</label>
+                        <textarea id="description" th:field="*{description}" class="form-control" rows="3"
+                                  placeholder="공동구매 진행 이유, 신선도 보장 안내 등을 자유롭게 작성해주세요."></textarea>
+                    </div>
+
+                    <!-- 초안 저장 / 즉시 게시 버튼 분리 -->
+                    <div class="d-flex flex-wrap gap-2 pt-2 border-top">
+                        <button type="submit" name="status" value="DRAFT" class="btn btn-warning flex-fill fw-semibold">
+                            초안으로 임시저장 (DRAFT)
+                        </button>
+                        <button type="submit" name="status" value="OPEN" class="btn btn-success flex-fill fw-semibold">
+                            지금 바로 공개 게시 (OPEN)
+                        </button>
+                        <a th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}" class="btn btn-outline-secondary">
+                            취소
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        function formatDateTimeLocal(date) {
+            const pad = (n) => String(n).padStart(2, '0');
+            return date.getFullYear() + '-' +
+                pad(date.getMonth() + 1) + '-' +
+                pad(date.getDate()) + 'T' +
+                pad(date.getHours()) + ':' +
+                pad(date.getMinutes());
+        }
+
+        function bindPeriodCalculator(startId, endId, daysId, badgeId, labelPrefix, quickBtnSelector) {
+            const startInput = document.getElementById(startId);
+            const endInput = document.getElementById(endId);
+            const daysInput = document.getElementById(daysId);
+            const badge = document.getElementById(badgeId);
+
+            if (!startInput || !endInput || !daysInput) return;
+
+            function updateBadgeFromDates() {
+                if (!startInput.value || !endInput.value) return;
+                const start = new Date(startInput.value);
+                const end = new Date(endInput.value);
+                const diffMs = end - start;
+                if (diffMs <= 0) {
+                    badge.textContent = '마감 일시는 시작 일시 이후여야 합니다';
+                    badge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle';
+                    return;
+                }
+                const diffDays = Math.round((diffMs / (1000 * 60 * 60 * 24)) * 10) / 10;
+                const wholeDays = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+                daysInput.value = wholeDays;
+
+                const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+                if (diffHours < 24) {
+                    badge.textContent = labelPrefix + ' 약 ' + diffHours + '시간 동안 가능';
+                } else {
+                    badge.textContent = labelPrefix + ' 약 ' + diffDays + '일 동안 가능';
+                }
+                badge.className = labelPrefix.includes('모집')
+                    ? 'badge bg-success-subtle text-success border border-success-subtle'
+                    : 'badge bg-primary-subtle text-primary border border-primary-subtle';
+            }
+
+            function updateEndFromDays() {
+                if (!startInput.value) return;
+                const days = parseInt(daysInput.value, 10);
+                if (isNaN(days) || days < 1) return;
+                const start = new Date(startInput.value);
+                const end = new Date(start.getTime() + days * 24 * 60 * 60 * 1000);
+                endInput.value = formatDateTimeLocal(end);
+                updateBadgeFromDates();
+            }
+
+            // 시작일 변경 시 -> 설정된 일수만큼 마감일 자동 조정
+            startInput.addEventListener('change', function () {
+                updateEndFromDays();
+            });
+
+            // 일수 입력 시 -> 마감일 자동 계산
+            daysInput.addEventListener('input', function () {
+                updateEndFromDays();
+            });
+
+            // 마감일 직접 변경 시 -> 몇 일 동안인지 역계산하여 표시
+            endInput.addEventListener('change', function () {
+                updateBadgeFromDates();
+            });
+
+            // 빠른 일수 선택 버튼 클릭 시
+            document.querySelectorAll(quickBtnSelector).forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    daysInput.value = this.getAttribute('data-days');
+                    updateEndFromDays();
+                });
+            });
+
+            // 초기 로드 시 현재 시작/마감일 기준으로 일수 계산
+            updateBadgeFromDates();
+        }
+
+        bindPeriodCalculator('startAt', 'endAt', 'recruitmentDays', 'recruitmentSummaryBadge', '시작일로부터', '.quick-recruit-days');
+        bindPeriodCalculator('pickupStartAt', 'pickupEndAt', 'pickupDays', 'pickupSummaryBadge', '수령 시작일로부터', '.quick-pickup-days');
+    });
+</script>
+</body>
+</html>

@@ -14,6 +14,7 @@
         <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
         <div class="d-flex align-items-center gap-3">
             <a th:href="@{/seller/stores}" class="text-decoration-none text-secondary">매장 목록</a>
+            <a th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}" class="text-decoration-none text-secondary">공동구매 관리</a>
             <a th:href="@{/}" class="text-decoration-none text-secondary">홈으로</a>
         </div>
     </div>
@@ -36,9 +37,12 @@
                     전화: <span th:text="${store.phone}">031-000-0000</span>
                 </p>
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex flex-wrap gap-2">
                 <a th:href="@{/seller/stores/{id}/edit(id=${store.id})}" class="btn btn-outline-secondary">
                     매장 정보 수정
+                </a>
+                <a th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}" class="btn btn-outline-success">
+                    공동구매 모집 관리
                 </a>
                 <a th:href="@{/seller/stores/{id}/products/new(id=${store.id})}" class="btn btn-success">
                     + 새 상품 등록
@@ -100,8 +104,48 @@
                                   th:text="${#numbers.formatInteger(product.regularPrice, 0, 'COMMA')} + '원'">10,000원</span>
                         </div>
 
-                        <!-- 간편 상태 변경 & 수정/삭제 버튼 그룹 -->
+                        <!-- 간편 상태 변경 & 수정/삭제 & 공동구매 연계 버튼 그룹 -->
                         <div class="d-flex flex-column gap-2">
+                            <!-- 공동구매 모집 상태별 버튼 -->
+                            <th:block th:with="gp=${groupPurchaseMap != null ? groupPurchaseMap.get(product.id) : null}">
+                                <!-- 1. 등록된 공동구매가 없는 경우: 등록 버튼 -->
+                                <a th:if="${gp == null}"
+                                   th:href="@{/seller/stores/{storeId}/group-purchases/new(storeId=${store.id}, productId=${product.id})}"
+                                   class="btn btn-outline-success btn-sm w-100 fw-semibold">
+                                    + 이 상품으로 공동구매 모집하기
+                                </a>
+
+                                <!-- 2. 공동구매 모집 초안인 경우: 주황/노랑 버튼 -->
+                                <a th:if="${gp != null and gp.status.name() == 'DRAFT'}"
+                                   th:href="@{/seller/stores/{storeId}/group-purchases/{id}/edit(storeId=${store.id}, id=${gp.id})}"
+                                   class="btn btn-warning btn-sm w-100 fw-semibold text-dark d-flex align-items-center justify-content-center gap-1">
+                                    <span class="badge bg-dark">초안</span>
+                                    <span>공동구매 모집 초안</span>
+                                </a>
+
+                                <!-- 3. 공동구매 모집중인 경우: 진한 초록 버튼 -->
+                                <a th:if="${gp != null and gp.status.name() == 'OPEN'}"
+                                   th:href="@{/seller/stores/{storeId}/group-purchases/{id}/edit(storeId=${store.id}, id=${gp.id})}"
+                                   class="btn btn-success btn-sm w-100 fw-semibold d-flex align-items-center justify-content-center gap-1">
+                                    <span class="badge bg-light text-success">진행중</span>
+                                    <span>공동구매 모집중</span>
+                                </a>
+
+                                <!-- 4. 공동구매 마감인 경우 (CLOSED, SUCCESS, FAILED): 회색 마감 버튼 + 새 모집 버튼 -->
+                                <div th:if="${gp != null and (gp.status.name() == 'CLOSED' or gp.status.name() == 'SUCCESS' or gp.status.name() == 'FAILED')}"
+                                     class="d-flex gap-1">
+                                    <a th:href="@{/seller/stores/{storeId}/group-purchases/{id}/edit(storeId=${store.id}, id=${gp.id})}"
+                                       class="btn btn-secondary btn-sm flex-fill fw-semibold">
+                                        공동구매 마감
+                                    </a>
+                                    <a th:href="@{/seller/stores/{storeId}/group-purchases/new(storeId=${store.id}, productId=${product.id})}"
+                                       class="btn btn-outline-success btn-sm"
+                                       title="이 상품으로 새 공동구매 모집 등록">
+                                        + 새 모집
+                                    </a>
+                                </div>
+                            </th:block>
+
                             <!-- 간편 상태 변경 폼 -->
                             <form th:action="@{/seller/stores/{storeId}/products/{productId}/status(storeId=${store.id}, productId=${product.id})}"
                                   method="post" class="d-flex gap-1">

@@ -31,6 +31,7 @@
 - 비로그인 사용자의 비공개 주소 접근 시 로그인 화면으로 이동
 - 판매자 매장 등록 및 정보 수정 (소유권 검증 포함)
 - 판매자 상품 등록, 목록 조회, 정보 수정 및 판매상태 관리 (이미지 업로드 및 삭제 지원)
+- 판매자 공동구매 모집 등록, 초안 저장(DRAFT), 정식 게시(OPEN), 수정 및 삭제 관리
 
 역할별 접근 제한과 주문, 결제는 아직 구현되지 않았습니다.
 
@@ -93,8 +94,9 @@ Workbench에서 프로젝트 DB에 연결한 뒤 다음 파일을 순서대로 �
 1. `database/001-create-users.sql`: 회원 테이블 생성
 2. `database/002-add-unique-nickname.sql`: 닉네임 중복 금지 제약 추가
 3. `database/003-create-stores-and-products.sql`: 매장 및 상품 테이블 생성
+4. `database/004-create-group-purchases.sql`: 공동구매 모집 테이블 생성
 
-회원가입 및 매장/상품 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
+회원가입 및 매장/상품/공동구매 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
 파일을 GitHub에서 받는 것만으로 DB에 반영되지는 않습니다.
 
 - 이미 적용한 파일은 다시 실행하지 않습니다. 특히 002는 반복 실행 시 오류가 발생합니다.
@@ -342,3 +344,26 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 매장 및 상품 조회/수정 요청 시 클라이언트의 입력값이 아닌 세션의 `@AuthenticationPrincipal LoginUser loginUser`에서 `userId`를 획득하여 해당 매장의 `seller_id`와 일치하는지 검증합니다.
 - 타인의 매장 또는 상품에 대한 접근 및 수정 시도시 `403 FORBIDDEN` 예외를 발생시켜 비인가 접근을 차단합니다.
 - 4번 권한 기능(판매자 역할 체크) 병합 전이라도 현재 로그인한 계정으로 즉시 매장과 상품을 생성하고 CRUD를 테스트할 수 있습니다.
+
+## 11. 판매자 공동구매 모집 관리 (6번 기능)
+
+### 지원 기능 및 엔드포인트
+
+| 기능 | HTTP 메서드 | 요청 주소 | 설명 |
+|---|---|---|---|
+| 공동구매 목록 | GET | `/seller/stores/{storeId}/group-purchases` | 특정 매장에 등록된 공동구매 캠페인 목록 및 현황 표시 |
+| 공동구매 등록 폼 | GET | `/seller/stores/{storeId}/group-purchases/new` | 대상 상품 선택, 공구가/수량/모집기간/수령조건 입력 화면 (`?productId=` 자동 선택 지원) |
+| 공동구매 등록 처리 | POST | `/seller/stores/{storeId}/group-purchases/new` | 초안 저장(`DRAFT`) 또는 즉시 공개 게시(`OPEN`)로 DB 저장 |
+| 공동구매 수정 폼 | GET | `/seller/stores/{storeId}/group-purchases/{id}/edit` | 본인 매장의 공동구매 설정 및 상태 수정 화면 |
+| 공동구매 수정 처리 | POST | `/seller/stores/{storeId}/group-purchases/{id}/edit` | 공동구매 조건 및 상태(`DRAFT`/`OPEN`/`CLOSED`) 갱신 |
+| 초안 즉시 게시 | POST | `/seller/stores/{storeId}/group-purchases/{id}/publish` | 초안(`DRAFT`) 상태의 모집을 즉시 공개(`OPEN`)로 전환 |
+| 모집 상태 간편 변경 | POST | `/seller/stores/{storeId}/group-purchases/{id}/status` | 목록 화면에서 원클릭으로 상태(`DRAFT`/`OPEN`/`CLOSED`) 전환 |
+| 공동구매 삭제 | POST | `/seller/stores/{storeId}/group-purchases/{id}/delete` | 참여자가 없는(`current_quantity == 0`) 공동구매 삭제 처리 |
+
+### 주요 정책 및 검증 규칙
+
+- **초안 저장 및 공개 게시 분리**: 모집 등록 시 `DRAFT`(초안/임시저장)로 먼저 저장해두고 검토 후 `OPEN`(공개 게시)으로 전환하거나, 등록 즉시 `OPEN`으로 게시할 수 있습니다.
+- **수량 및 기간 검증**: 최대 모집 수량은 목표 달성 수량 이상이어야 하며(`max_quantity >= target_quantity`), 모집 마감 일시는 시작 일시 이후, 수령 마감 일시는 수령 시작 일시 이후여야 합니다.
+- **1인당 제한 수량 선택 설정**: `limit_per_user`는 선택 사항(기본값 제한 없음/`NULL`)으로, 사재기 방지가 필요한 특가 상품에 한해 설정할 수 있습니다.
+- **양방향 일수 계산 UI**: 모집 기간과 매장 수령 기간 설정 시 일수(예: 3일간)를 입력하면 마감 일시가 자동 계산되고, 반대로 마감 일시를 직접 지정하면 몇 일 동안 진행되는지 자동으로 역계산되어 표시됩니다.
+- **상품 관리 탭 연동**: 상품 목록 화면(`/seller/stores/{storeId}/products`)에서 각 상품의 공동구매 상태(`미등록`, `공동구매 모집 초안`, `공동구매 모집중`, `공동구매 마감`)가 동적 버튼으로 표시됩니다.
