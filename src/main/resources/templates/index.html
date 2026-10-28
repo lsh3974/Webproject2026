@@ -32,6 +32,10 @@
 
         <div sec:authorize="isAuthenticated()"
              class="d-flex align-items-center gap-3">
+            <a th:href="@{/seller/stores}" class="btn btn-outline-success btn-sm">
+                내 매장 관리
+            </a>
+
             <span>
                 <strong th:text="${#authentication.principal.displayName}">
                     닉네임

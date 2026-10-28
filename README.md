@@ -29,8 +29,10 @@
 - POST 로그아웃과 세션 종료
 - 정지·탈퇴 계정의 신규 로그인 차단
 - 비로그인 사용자의 비공개 주소 접근 시 로그인 화면으로 이동
+- 판매자 매장 등록 및 정보 수정 (소유권 검증 포함)
+- 판매자 상품 등록, 목록 조회, 정보 수정 및 판매상태 관리 (이미지 업로드 및 삭제 지원)
 
-역할별 접근 제한과 매장·주문 소유권 검사, 상품 등록, 주문, 결제는 아직 구현되지 않았습니다.
+역할별 접근 제한과 주문, 결제는 아직 구현되지 않았습니다.
 
 ## 1. Java 설정
 
@@ -90,8 +92,9 @@ Workbench에서 프로젝트 DB에 연결한 뒤 다음 파일을 순서대로 �
 
 1. `database/001-create-users.sql`: 회원 테이블 생성
 2. `database/002-add-unique-nickname.sql`: 닉네임 중복 금지 제약 추가
+3. `database/003-create-stores-and-products.sql`: 매장 및 상품 테이블 생성
 
-회원가입 기능을 사용하기 전에 두 SQL을 모두 적용해야 합니다.
+회원가입 및 매장/상품 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
 파일을 GitHub에서 받는 것만으로 DB에 반영되지는 않습니다.
 
 - 이미 적용한 파일은 다시 실행하지 않습니다. 특히 002는 반복 실행 시 오류가 발생합니다.
@@ -130,6 +133,8 @@ IntelliJ에서 `HanbaguniApplication`을 실행합니다.
 | 회원가입 | http://localhost:8080/signup |
 | 로그인 | http://localhost:8080/login |
 | 상태 확인 | http://localhost:8080/actuator/health |
+| 내 매장 관리 (판매자) | http://localhost:8080/seller/stores |
+| 새 매장 등록 (판매자) | http://localhost:8080/seller/stores/new |
 
 상태 확인 응답의 `status`가 `UP`이면 등록된 상태 검사 기준으로 정상입니다.
 
@@ -312,3 +317,28 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - DB에서 상태·역할·닉네임을 바꿔도 기존 세션에 즉시 반영되지 않습니다.
 - 기존 세션 강제 만료는 아직 구현하지 않았습니다.
 - 세션은 현재 서버 메모리에 저장하므로 서버 재시작 후 재로그인이 필요할 수 있습니다.
+
+## 10. 판매자 매장 및 상품 관리 (5번 기능)
+
+### 지원 기능 및 엔드포인트
+
+| 기능 | HTTP 메서드 | 요청 주소 | 설명 |
+|---|---|---|---|
+| 매장 목록 | GET | `/seller/stores` | 로그인한 사용자가 등록한 매장 목록 및 대시보드 |
+| 매장 등록 폼 | GET | `/seller/stores/new` | 신규 매장 정보 입력 화면 |
+| 매장 등록 처리 | POST | `/seller/stores/new` | 입력값 검증 후 신규 매장 DB 생성 |
+| 매장 수정 폼 | GET | `/seller/stores/{id}/edit` | 본인 매장 정보 수정 화면 (소유권 검증) |
+| 매장 수정 처리 | POST | `/seller/stores/{id}/edit` | 본인 매장 정보 및 영업상태(ACTIVE/CLOSED/SUSPENDED) 갱신 |
+| 상품 목록 | GET | `/seller/stores/{storeId}/products` | 특정 매장의 상품 목록 및 상태 표시 |
+| 상품 등록 폼 | GET | `/seller/stores/{storeId}/products/new` | 매장 소속 신규 상품 등록 화면 |
+| 상품 등록 처리 | POST | `/seller/stores/{storeId}/products/new` | 상품명, 카테고리, 가격, 단위, 설명 등록 (파일 업로드 지원) |
+| 상품 수정 폼 | GET | `/seller/stores/{storeId}/products/{productId}/edit` | 본인 상품 수정 화면 |
+| 상품 수정 처리 | POST | `/seller/stores/{storeId}/products/{productId}/edit` | 상품 정보 및 판매상태(ON_SALE/SOLD_OUT/HIDDEN) 갱신 |
+| 상품 상태 간편 변경 | POST | `/seller/stores/{storeId}/products/{productId}/status` | 상품 목록에서 원클릭으로 판매상태(판매중/품절/숨김) 변경 |
+| 상품 삭제 | POST | `/seller/stores/{storeId}/products/{productId}/delete` | 본인 상품 삭제 처리 (소유권 검증 및 확인창 제공) |
+
+### 소유권 검증 원칙
+
+- 매장 및 상품 조회/수정 요청 시 클라이언트의 입력값이 아닌 세션의 `@AuthenticationPrincipal LoginUser loginUser`에서 `userId`를 획득하여 해당 매장의 `seller_id`와 일치하는지 검증합니다.
+- 타인의 매장 또는 상품에 대한 접근 및 수정 시도시 `403 FORBIDDEN` 예외를 발생시켜 비인가 접근을 차단합니다.
+- 4번 권한 기능(판매자 역할 체크) 병합 전이라도 현재 로그인한 계정으로 즉시 매장과 상품을 생성하고 CRUD를 테스트할 수 있습니다.
