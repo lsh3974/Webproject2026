@@ -98,7 +98,7 @@ public class SellerProductController {
             return "seller/product/new";
         }
 
-        // 파일 업로드가 있으면 파일 경로 우선 적용
+        // 유효성 통과 및 권한 확인 후에만 파일 저장 실행
         if (form.getImageFile() != null && !form.getImageFile().isEmpty()) {
             String uploadedPath = fileStorageService.store(form.getImageFile());
             form.setImageUrl(uploadedPath);
@@ -117,7 +117,7 @@ public class SellerProductController {
             Model model) {
 
         Store store = storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
-        Product product = productService.getProductWithOwnershipCheck(productId, loginUser.getUserId());
+        Product product = productService.getProductWithStoreAndOwnershipCheck(storeId, productId, loginUser.getUserId());
 
         model.addAttribute("store", store);
         model.addAttribute("product", product);
@@ -135,22 +135,24 @@ public class SellerProductController {
             Model model,
             RedirectAttributes redirectAttributes) {
 
+        // 1. 매장 소유권 및 상품의 매장 일치/소유권 검사를 가장 먼저 실행 (인가 실패 시 파일 저장 방지)
         Store store = storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
+        Product product = productService.getProductWithStoreAndOwnershipCheck(storeId, productId, loginUser.getUserId());
 
+        // 2. 폼 유효성 검사 오류 시 리턴
         if (bindingResult.hasErrors()) {
-            Product product = productService.getProductWithOwnershipCheck(productId, loginUser.getUserId());
             model.addAttribute("store", store);
             model.addAttribute("product", product);
             return "seller/product/edit";
         }
 
-        // 새 파일이 업로드된 경우 경로 갱신
+        // 3. 모든 권한과 유효성 검증을 통과한 후에만 새 파일 업로드 저장 수행
         if (form.getImageFile() != null && !form.getImageFile().isEmpty()) {
             String uploadedPath = fileStorageService.store(form.getImageFile());
             form.setImageUrl(uploadedPath);
         }
 
-        productService.updateProduct(productId, loginUser.getUserId(), form);
+        productService.updateProduct(storeId, productId, loginUser.getUserId(), form);
         redirectAttributes.addFlashAttribute("successMessage", "상품 정보가 수정되었습니다.");
         return "redirect:/seller/stores/" + storeId + "/products";
     }
@@ -164,7 +166,7 @@ public class SellerProductController {
             RedirectAttributes redirectAttributes) {
 
         storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
-        productService.updateProductStatus(productId, loginUser.getUserId(), status);
+        productService.updateProductStatus(storeId, productId, loginUser.getUserId(), status);
         redirectAttributes.addFlashAttribute("successMessage", "상품 판매 상태가 변경되었습니다.");
         return "redirect:/seller/stores/" + storeId + "/products";
     }
@@ -177,7 +179,7 @@ public class SellerProductController {
             RedirectAttributes redirectAttributes) {
 
         storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
-        productService.deleteProduct(productId, loginUser.getUserId());
+        productService.deleteProduct(storeId, productId, loginUser.getUserId());
         redirectAttributes.addFlashAttribute("successMessage", "상품이 삭제되었습니다.");
         return "redirect:/seller/stores/" + storeId + "/products";
     }
