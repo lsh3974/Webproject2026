@@ -120,7 +120,7 @@ public class SellerGroupPurchaseController {
             Model model) {
 
         Store store = storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
-        GroupPurchase gp = groupPurchaseService.getWithOwnershipCheck(id, loginUser.getUserId());
+        GroupPurchase gp = groupPurchaseService.getWithStoreAndOwnershipCheck(storeId, id, loginUser.getUserId());
         List<Product> products = productService.findProductsByStoreId(storeId);
 
         model.addAttribute("store", store);
@@ -141,9 +141,9 @@ public class SellerGroupPurchaseController {
             RedirectAttributes redirectAttributes) {
 
         Store store = storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
+        GroupPurchase gp = groupPurchaseService.getWithStoreAndOwnershipCheck(storeId, id, loginUser.getUserId());
 
         if (bindingResult.hasErrors()) {
-            GroupPurchase gp = groupPurchaseService.getWithOwnershipCheck(id, loginUser.getUserId());
             List<Product> products = productService.findProductsByStoreId(storeId);
             model.addAttribute("store", store);
             model.addAttribute("groupPurchase", gp);
@@ -151,7 +151,7 @@ public class SellerGroupPurchaseController {
             return "seller/grouppurchase/edit";
         }
 
-        groupPurchaseService.updateGroupPurchase(id, loginUser.getUserId(), form);
+        groupPurchaseService.updateGroupPurchase(storeId, id, loginUser.getUserId(), form);
         redirectAttributes.addFlashAttribute("successMessage", "공동구매 모집 정보가 수정되었습니다.");
         return "redirect:/seller/stores/" + storeId + "/group-purchases";
     }
@@ -164,7 +164,7 @@ public class SellerGroupPurchaseController {
             RedirectAttributes redirectAttributes) {
 
         storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
-        groupPurchaseService.publishGroupPurchase(id, loginUser.getUserId());
+        groupPurchaseService.publishGroupPurchase(storeId, id, loginUser.getUserId());
         redirectAttributes.addFlashAttribute("successMessage", "공동구매 모집이 공개 게시(OPEN)되었습니다.");
         return "redirect:/seller/stores/" + storeId + "/group-purchases";
     }
@@ -178,7 +178,7 @@ public class SellerGroupPurchaseController {
             RedirectAttributes redirectAttributes) {
 
         storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
-        groupPurchaseService.updateStatus(id, loginUser.getUserId(), status);
+        groupPurchaseService.updateStatus(storeId, id, loginUser.getUserId(), status);
         redirectAttributes.addFlashAttribute("successMessage", "공동구매 모집 상태가 변경되었습니다.");
         return "redirect:/seller/stores/" + storeId + "/group-purchases";
     }
@@ -191,7 +191,7 @@ public class SellerGroupPurchaseController {
             RedirectAttributes redirectAttributes) {
 
         storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
-        groupPurchaseService.deleteGroupPurchase(id, loginUser.getUserId());
+        groupPurchaseService.deleteGroupPurchase(storeId, id, loginUser.getUserId());
         redirectAttributes.addFlashAttribute("successMessage", "공동구매 모집이 삭제되었습니다.");
         return "redirect:/seller/stores/" + storeId + "/group-purchases";
     }

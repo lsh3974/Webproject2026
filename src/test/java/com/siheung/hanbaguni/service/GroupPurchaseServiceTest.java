@@ -80,7 +80,7 @@ class GroupPurchaseServiceTest {
         ReflectionTestUtils.setField(savedGp, "id", 500L);
 
         given(storeService.getStoreWithOwnershipCheck(storeId, sellerId)).willReturn(store);
-        given(productService.getProductWithOwnershipCheck(productId, sellerId)).willReturn(product);
+        given(productService.getProductWithStoreAndOwnershipCheck(storeId, productId, sellerId)).willReturn(product);
         given(groupPurchaseRepository.save(any(GroupPurchase.class))).willReturn(savedGp);
 
         // when
@@ -131,7 +131,7 @@ class GroupPurchaseServiceTest {
         ReflectionTestUtils.setField(savedGp, "id", 501L);
 
         given(storeService.getStoreWithOwnershipCheck(storeId, sellerId)).willReturn(store);
-        given(productService.getProductWithOwnershipCheck(productId, sellerId)).willReturn(product);
+        given(productService.getProductWithStoreAndOwnershipCheck(storeId, productId, sellerId)).willReturn(product);
         given(groupPurchaseRepository.save(any(GroupPurchase.class))).willReturn(savedGp);
 
         // when
@@ -148,11 +148,12 @@ class GroupPurchaseServiceTest {
     void publishGroupPurchase_success() {
         // given
         Long sellerId = 1L;
+        Long storeId = 10L;
         User seller = new User("seller@test.com", "hash", "판매자1");
         ReflectionTestUtils.setField(seller, "id", sellerId);
 
         Store store = new Store(seller, "시흥마트", "123-45-67890", "031-123-4567", "시흥시", "101호", "소개");
-        ReflectionTestUtils.setField(store, "id", 10L);
+        ReflectionTestUtils.setField(store, "id", storeId);
 
         Product product = new Product(store, "사과", "과일", 15000, "1박스", "설명", null);
         ReflectionTestUtils.setField(product, "id", 100L);
@@ -168,7 +169,7 @@ class GroupPurchaseServiceTest {
         given(groupPurchaseRepository.findById(500L)).willReturn(Optional.of(gp));
 
         // when
-        groupPurchaseService.publishGroupPurchase(500L, sellerId);
+        groupPurchaseService.publishGroupPurchase(storeId, 500L, sellerId);
 
         // then
         assertThat(gp.getStatus()).isEqualTo(GroupPurchase.Status.OPEN);
@@ -203,5 +204,36 @@ class GroupPurchaseServiceTest {
         assertThatThrownBy(() -> groupPurchaseService.getWithOwnershipCheck(500L, otherSellerId))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("403 FORBIDDEN");
+    }
+
+    @Test
+    @DisplayName("같은 판매자 소유라도 URL 매장 ID와 공동구매 소속 매장이 다르면 404 NOT_FOUND 발생")
+    void getWithStoreAndOwnershipCheck_storeMismatch() {
+        // given
+        Long sellerId = 1L;
+        Long storeAId = 10L;
+        Long storeBId = 20L;
+
+        User seller = new User("owner@test.com", "hash", "주인");
+        ReflectionTestUtils.setField(seller, "id", sellerId);
+
+        Store storeB = new Store(seller, "시흥2호점", "123-45-67891", "031-123-4568", "시흥시", "201호", "소개");
+        ReflectionTestUtils.setField(storeB, "id", storeBId);
+
+        Product product = new Product(storeB, "사과", "과일", 15000, "1박스", "설명", null);
+        LocalDateTime now = LocalDateTime.now();
+        GroupPurchase gp = new GroupPurchase(
+                storeB, product, "사과 공구", 12000, 10, 50, 3,
+                now, now.plusDays(3), now.plusDays(4), now.plusDays(5),
+                "안내", "설명", GroupPurchase.Status.DRAFT
+        );
+        ReflectionTestUtils.setField(gp, "id", 500L);
+
+        given(groupPurchaseRepository.findById(500L)).willReturn(Optional.of(gp));
+
+        // when & then
+        assertThatThrownBy(() -> groupPurchaseService.getWithStoreAndOwnershipCheck(storeAId, 500L, sellerId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404 NOT_FOUND");
     }
 }

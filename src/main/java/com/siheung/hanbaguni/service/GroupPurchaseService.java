@@ -46,14 +46,18 @@ public class GroupPurchaseService {
         return gp;
     }
 
+    public GroupPurchase getWithStoreAndOwnershipCheck(Long storeId, Long id, Long sellerId) {
+        GroupPurchase gp = getWithOwnershipCheck(id, sellerId);
+        if (!gp.getStore().getId().equals(storeId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 매장에 속한 공동구매 모집이 아닙니다.");
+        }
+        return gp;
+    }
+
     @Transactional
     public Long createGroupPurchase(Long storeId, Long sellerId, GroupPurchaseForm form) {
         Store store = storeService.getStoreWithOwnershipCheck(storeId, sellerId);
-        Product product = productService.getProductWithOwnershipCheck(form.getProductId(), sellerId);
-
-        if (!product.getStore().getId().equals(storeId)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 매장에 속한 상품만 공동구매로 등록할 수 있습니다.");
-        }
+        Product product = productService.getProductWithStoreAndOwnershipCheck(storeId, form.getProductId(), sellerId);
 
         GroupPurchase gp = new GroupPurchase(
                 store,
@@ -77,8 +81,8 @@ public class GroupPurchaseService {
     }
 
     @Transactional
-    public void updateGroupPurchase(Long id, Long sellerId, GroupPurchaseForm form) {
-        GroupPurchase gp = getWithOwnershipCheck(id, sellerId);
+    public void updateGroupPurchase(Long storeId, Long id, Long sellerId, GroupPurchaseForm form) {
+        GroupPurchase gp = getWithStoreAndOwnershipCheck(storeId, id, sellerId);
 
         gp.update(
                 form.getTitle().trim(),
@@ -97,20 +101,20 @@ public class GroupPurchaseService {
     }
 
     @Transactional
-    public void publishGroupPurchase(Long id, Long sellerId) {
-        GroupPurchase gp = getWithOwnershipCheck(id, sellerId);
+    public void publishGroupPurchase(Long storeId, Long id, Long sellerId) {
+        GroupPurchase gp = getWithStoreAndOwnershipCheck(storeId, id, sellerId);
         gp.publish();
     }
 
     @Transactional
-    public void updateStatus(Long id, Long sellerId, GroupPurchase.Status status) {
-        GroupPurchase gp = getWithOwnershipCheck(id, sellerId);
+    public void updateStatus(Long storeId, Long id, Long sellerId, GroupPurchase.Status status) {
+        GroupPurchase gp = getWithStoreAndOwnershipCheck(storeId, id, sellerId);
         gp.updateStatus(status);
     }
 
     @Transactional
-    public void deleteGroupPurchase(Long id, Long sellerId) {
-        GroupPurchase gp = getWithOwnershipCheck(id, sellerId);
+    public void deleteGroupPurchase(Long storeId, Long id, Long sellerId) {
+        GroupPurchase gp = getWithStoreAndOwnershipCheck(storeId, id, sellerId);
         if (gp.getCurrentQuantity() > 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 참여자가 있는 공동구매는 삭제할 수 없습니다.");
         }
