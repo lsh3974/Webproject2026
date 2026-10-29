@@ -29,8 +29,11 @@
 - POST 로그아웃과 세션 종료
 - 정지·탈퇴 계정의 신규 로그인 차단
 - 비로그인 사용자의 비공개 주소 접근 시 로그인 화면으로 이동
+- 판매자 매장 등록 및 정보 수정 (소유권 검증 포함)
+- 판매자 상품 등록, 목록 조회, 정보 수정 및 판매상태 관리 (이미지 업로드 및 삭제 지원)
+- 판매자 공동구매 모집 등록, 초안 저장(DRAFT), 정식 게시(OPEN), 수정 및 삭제 관리
 
-역할별 접근 제한과 매장·주문 소유권 검사, 상품 등록, 주문, 결제는 아직 구현되지 않았습니다.
+역할별 접근 제한과 주문, 결제는 아직 구현되지 않았습니다.
 
 ## 1. Java 설정
 
@@ -90,8 +93,10 @@ Workbench에서 프로젝트 DB에 연결한 뒤 다음 파일을 순서대로 �
 
 1. `database/001-create-users.sql`: 회원 테이블 생성
 2. `database/002-add-unique-nickname.sql`: 닉네임 중복 금지 제약 추가
+3. `database/003-create-stores-and-products.sql`: 매장 및 상품 테이블 생성
+4. `database/004-create-group-purchases.sql`: 공동구매 모집 테이블 생성
 
-회원가입 기능을 사용하기 전에 두 SQL을 모두 적용해야 합니다.
+회원가입 및 매장/상품/공동구매 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
 파일을 GitHub에서 받는 것만으로 DB에 반영되지는 않습니다.
 
 - 이미 적용한 파일은 다시 실행하지 않습니다. 특히 002는 반복 실행 시 오류가 발생합니다.
@@ -130,6 +135,8 @@ IntelliJ에서 `HanbaguniApplication`을 실행합니다.
 | 회원가입 | http://localhost:8080/signup |
 | 로그인 | http://localhost:8080/login |
 | 상태 확인 | http://localhost:8080/actuator/health |
+| 내 매장 관리 (판매자) | http://localhost:8080/seller/stores |
+| 새 매장 등록 (판매자) | http://localhost:8080/seller/stores/new |
 
 상태 확인 응답의 `status`가 `UP`이면 등록된 상태 검사 기준으로 정상입니다.
 
@@ -265,7 +272,7 @@ Settings → Build Tools → Maven → Maven home path를
 - 별도의 POST 로그인 컨트롤러를 만들지 않습니다.
 - CustomUserDetailsService가 이메일을 정리해 DB 회원을 조회하고 LoginUser를 반환합니다.
 - Spring Security가 PasswordEncoder로 입력 비밀번호와 DB 해시를 비교합니다.
-- 성공하면 항상 `/`로 이동합니다.
+- 로그인 성공 시 역할별 핸들러(`RoleBasedLoginSuccessHandler`)에 의해 이동합니다. (SELLER: `/seller/stores`, CUSTOMER: `/`)
 - 실패하면 `/login?error`에서 공통 오류를 표시합니다.
 - 정지·탈퇴 계정의 신규 로그인을 차단합니다.
 - 로그인 실패 원인을 세부적으로 구분해 계정 존재 여부를 알리지 않습니다.
@@ -312,7 +319,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - DB에서 상태·역할·닉네임을 바꿔도 기존 세션에 즉시 반영되지 않습니다.
 - 기존 세션 강제 만료는 아직 구현하지 않았습니다.
 - 세션은 현재 서버 메모리에 저장하므로 서버 재시작 후 재로그인이 필요할 수 있습니다.
-## 고객·판매자 권한 처리 (4번 기능)
+
+## 10. 고객·판매자 권한 처리 (4번 기능)
 
 ### 접근 정책
 
@@ -345,10 +353,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 회원가입 기본 권한은 CUSTOMER입니다.
 - 판매자 테스트 계정은 각자 로컬 DB에서 role을 SELLER로 변경합니다.
 - DB에서 권한을 변경한 뒤에는 로그아웃 후 다시 로그인해야 합니다.
-- 5번: 매장·상품 관리에도 동일한 판매자 경로 제한이 있으므로
-  병합 시 중복 없이 유지합니다.
-- 판매자 역할 확인과 개별 매장·상품의 소유권 검사는 별개입니다.
-  소유권 검사는 해당 기능에서 유지해야 합니다.
+- 5번: 매장·상품 관리에도 동일한 판매자 경로 제한이 있으므로 병합 시 중복 없이 유지합니다.
+- 판매자 역할 확인과 개별 매장·상품의 소유권 검사는 별개입니다. 소유권 검사는 해당 기능에서 유지해야 합니다.
 
 ### 수동 검증 결과
 
@@ -357,11 +363,50 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 403 안내 화면 표시 확인
 - 비로그인 상태의 판매자 경로 접근 시 로그인 화면 이동 확인
 
-### 남은 검증
+## 11. 판매자 매장 및 상품 관리 (5번 기능)
 
-- 5번: 매장·상품 관리 병합 후 판매자 화면 정상 연결 확인
-- ADMIN 계정의 접근 차단 확인
-- 자동 테스트는 아직 실행하지 않았습니다.
+### 지원 기능 및 엔드포인트
 
-판매자 화면 코드가 없는 상태에서는 SELLER로 접근할 때
-404가 발생할 수 있습니다. 이는 판매자 화면 연동 완료를 의미하지 않습니다.
+| 기능 | HTTP 메서드 | 요청 주소 | 설명 |
+|---|---|---|---|
+| 매장 목록 | GET | `/seller/stores` | 로그인한 사용자가 등록한 매장 목록 및 대시보드 |
+| 매장 등록 폼 | GET | `/seller/stores/new` | 신규 매장 정보 입력 화면 |
+| 매장 등록 처리 | POST | `/seller/stores/new` | 입력값 검증 후 신규 매장 DB 생성 |
+| 매장 수정 폼 | GET | `/seller/stores/{id}/edit` | 본인 매장 정보 수정 화면 (소유권 검증) |
+| 매장 수정 처리 | POST | `/seller/stores/{id}/edit` | 본인 매장 정보 및 영업상태(ACTIVE/CLOSED/SUSPENDED) 갱신 |
+| 상품 목록 | GET | `/seller/stores/{storeId}/products` | 특정 매장의 상품 목록 및 상태 표시 |
+| 상품 등록 폼 | GET | `/seller/stores/{storeId}/products/new` | 매장 소속 신규 상품 등록 화면 |
+| 상품 등록 처리 | POST | `/seller/stores/{storeId}/products/new` | 상품명, 카테고리, 가격, 단위, 설명 등록 (파일 업로드 지원) |
+| 상품 수정 폼 | GET | `/seller/stores/{storeId}/products/{productId}/edit` | 본인 상품 수정 화면 |
+| 상품 수정 처리 | POST | `/seller/stores/{storeId}/products/{productId}/edit` | 상품 정보 및 판매상태(ON_SALE/SOLD_OUT/HIDDEN) 갱신 |
+| 상품 상태 간편 변경 | POST | `/seller/stores/{storeId}/products/{productId}/status` | 상품 목록에서 원클릭으로 판매상태(판매중/품절/숨김) 변경 |
+| 상품 삭제 | POST | `/seller/stores/{storeId}/products/{productId}/delete` | 본인 상품 삭제 처리 (소유권 검증 및 확인창 제공) |
+
+### 소유권 검증 원칙
+
+- 매장 및 상품 조회/수정 요청 시 클라이언트의 입력값이 아닌 세션의 `@AuthenticationPrincipal LoginUser loginUser`에서 `userId`를 획득하여 해당 매장의 `seller_id`와 일치하는지 검증합니다.
+- 타인의 매장 또는 상품에 대한 접근 및 수정 시도시 `403 FORBIDDEN` 예외를 발생시켜 비인가 접근을 차단합니다.
+- 4번 권한 기능(판매자 역할 체크) 병합 전이라도 현재 로그인한 계정으로 즉시 매장과 상품을 생성하고 CRUD를 테스트할 수 있습니다.
+
+## 12. 판매자 공동구매 모집 관리 (6번 기능)
+
+### 지원 기능 및 엔드포인트
+
+| 기능 | HTTP 메서드 | 요청 주소 | 설명 |
+|---|---|---|---|
+| 공동구매 목록 | GET | `/seller/stores/{storeId}/group-purchases` | 특정 매장에 등록된 공동구매 캠페인 목록 및 현황 표시 |
+| 공동구매 등록 폼 | GET | `/seller/stores/{storeId}/group-purchases/new` | 대상 상품 선택, 공구가/수량/모집기간/수령조건 입력 화면 (`?productId=` 자동 선택 지원) |
+| 공동구매 등록 처리 | POST | `/seller/stores/{storeId}/group-purchases/new` | 초안 저장(`DRAFT`) 또는 즉시 공개 게시(`OPEN`)로 DB 저장 |
+| 공동구매 수정 폼 | GET | `/seller/stores/{storeId}/group-purchases/{id}/edit` | 본인 매장의 공동구매 설정 및 상태 수정 화면 |
+| 공동구매 수정 처리 | POST | `/seller/stores/{storeId}/group-purchases/{id}/edit` | 공동구매 조건 및 상태(`DRAFT`/`OPEN`/`CLOSED`) 갱신 |
+| 초안 즉시 게시 | POST | `/seller/stores/{storeId}/group-purchases/{id}/publish` | 초안(`DRAFT`) 상태의 모집을 즉시 공개(`OPEN`)로 전환 |
+| 모집 상태 간편 변경 | POST | `/seller/stores/{storeId}/group-purchases/{id}/status` | 목록 화면에서 원클릭으로 상태(`DRAFT`/`OPEN`/`CLOSED`) 전환 |
+| 공동구매 삭제 | POST | `/seller/stores/{storeId}/group-purchases/{id}/delete` | 참여자가 없는(`current_quantity == 0`) 공동구매 삭제 처리 |
+
+### 주요 정책 및 검증 규칙
+
+- **초안 저장 및 공개 게시 분리**: 모집 등록 시 `DRAFT`(초안/임시저장)로 먼저 저장해두고 검토 후 `OPEN`(공개 게시)으로 전환하거나, 등록 즉시 `OPEN`으로 게시할 수 있습니다.
+- **수량 및 기간 검증**: 최대 모집 수량은 목표 달성 수량 이상이어야 하며(`max_quantity >= target_quantity`), 모집 마감 일시는 시작 일시 이후, 수령 마감 일시는 수령 시작 일시 이후여야 합니다.
+- **1인당 제한 수량 선택 설정**: `limit_per_user`는 선택 사항(기본값 제한 없음/`NULL`)으로, 사재기 방지가 필요한 특가 상품에 한해 설정할 수 있습니다.
+- **양방향 일수 계산 UI**: 모집 기간과 매장 수령 기간 설정 시 일수(예: 3일간)를 입력하면 마감 일시가 자동 계산되고, 반대로 마감 일시를 직접 지정하면 몇 일 동안 진행되는지 자동으로 역계산되어 표시됩니다.
+- **상품 관리 탭 연동**: 상품 목록 화면(`/seller/stores/{storeId}/products`)에서 각 상품의 공동구매 상태(`미등록`, `공동구매 모집 초안`, `공동구매 모집중`, `공동구매 마감`)가 동적 버튼으로 표시됩니다.

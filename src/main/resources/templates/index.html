@@ -32,6 +32,12 @@
 
         <div sec:authorize="isAuthenticated()"
              class="d-flex align-items-center gap-3">
+            <!-- 판매자(ROLE_SELLER) 권한이 있는 사용자에게만 매장 관리 버튼 표시 -->
+            <a sec:authorize="hasRole('SELLER')"
+               th:href="@{/seller/stores}" class="btn btn-outline-success btn-sm">
+                내 매장 관리
+            </a>
+
             <span>
                 <strong th:text="${#authentication.principal.displayName}">
                     닉네임
