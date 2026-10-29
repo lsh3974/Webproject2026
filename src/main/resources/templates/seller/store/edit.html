@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>매장 정보 수정 - 시흥한바구니</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+<body class="bg-light">
+
+<nav class="navbar bg-white border-bottom">
+    <div class="container">
+        <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
+        <a th:href="@{/seller/stores}" class="text-decoration-none text-secondary">매장 목록으로</a>
+    </div>
+</nav>
+
+<main class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="card border-0 shadow-sm p-4">
+                <h1 class="h4 fw-bold mb-3">매장 정보 수정</h1>
+                <p class="text-secondary small mb-4">매장의 기본 정보 및 영업 상태를 수정할 수 있습니다.</p>
+
+                <form th:action="@{/seller/stores/{id}/edit(id=${store.id})}" th:object="${storeForm}" method="post">
+                    <div class="mb-3">
+                        <label for="name" class="form-label fw-semibold">매장 이름 *</label>
+                        <input type="text" id="name" th:field="*{name}" class="form-control"
+                               th:classappend="${#fields.hasErrors('name')} ? 'is-invalid' : ''">
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="businessNumber" class="form-label fw-semibold">사업자등록번호</label>
+                        <input type="text" id="businessNumber" th:field="*{businessNumber}" class="form-control"
+                               th:classappend="${#fields.hasErrors('businessNumber')} ? 'is-invalid' : ''">
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('businessNumber')}" th:errors="*{businessNumber}"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="phone" class="form-label fw-semibold">매장 전화번호 *</label>
+                        <input type="text" id="phone" th:field="*{phone}" class="form-control"
+                               th:classappend="${#fields.hasErrors('phone')} ? 'is-invalid' : ''">
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('phone')}" th:errors="*{phone}"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="address" class="form-label fw-semibold">매장 주소 *</label>
+                        <input type="text" id="address" th:field="*{address}" class="form-control"
+                               th:classappend="${#fields.hasErrors('address')} ? 'is-invalid' : ''">
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('address')}" th:errors="*{address}"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="addressDetail" class="form-label fw-semibold">상세 주소</label>
+                        <input type="text" id="addressDetail" th:field="*{addressDetail}" class="form-control"
+                               th:classappend="${#fields.hasErrors('addressDetail')} ? 'is-invalid' : ''">
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('addressDetail')}" th:errors="*{addressDetail}"></div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="status" class="form-label fw-semibold">영업 상태 *</label>
+                        <select id="status" th:field="*{status}" class="form-select">
+                            <option value="ACTIVE">영업중 (ACTIVE)</option>
+                            <option value="CLOSED">휴업 / 임시종료 (CLOSED)</option>
+                            <option value="SUSPENDED">정지 (SUSPENDED)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="description" class="form-label fw-semibold">매장 소개</label>
+                        <textarea id="description" th:field="*{description}" class="form-control" rows="3"></textarea>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-fill">수정 완료</button>
+                        <a th:href="@{/seller/stores}" class="btn btn-outline-secondary">취소</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

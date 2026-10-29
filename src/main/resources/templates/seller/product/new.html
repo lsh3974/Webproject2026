@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>새 상품 등록 - 시흥한바구니</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+<body class="bg-light">
+
+<nav class="navbar bg-white border-bottom">
+    <div class="container">
+        <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
+        <a th:href="@{/seller/stores/{id}/products(id=${store.id})}" class="text-decoration-none text-secondary">
+            상품 목록으로
+        </a>
+    </div>
+</nav>
+
+<main class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-6">
+            <div class="card border-0 shadow-sm p-4">
+                <span class="text-muted small" th:text="${store.name} + ' 소속 상품'">매장명 소속 상품</span>
+                <h1 class="h4 fw-bold mb-3 mt-1">새 상품 등록</h1>
+                <p class="text-secondary small mb-4">공동구매로 판매할 마트 상품의 기본 정보를 등록해주세요.</p>
+
+                <form th:action="@{/seller/stores/{id}/products/new(id=${store.id})}" th:object="${productForm}" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="name" class="form-label fw-semibold">상품명 *</label>
+                        <input type="text" id="name" th:field="*{name}" class="form-control"
+                               th:classappend="${#fields.hasErrors('name')} ? 'is-invalid' : ''"
+                               placeholder="예: 꿀사과 (부사) 1박스">
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label for="category" class="form-label fw-semibold">카테고리 *</label>
+                            <input type="text" id="category" th:field="*{category}" class="form-control"
+                                   list="categoryOptions"
+                                   th:classappend="${#fields.hasErrors('category')} ? 'is-invalid' : ''"
+                                   placeholder="선택 또는 직접 입력">
+                            <datalist id="categoryOptions">
+                                <option value="과일">과일</option>
+                                <option value="채소">채소</option>
+                                <option value="정육/계란">정육/계란</option>
+                                <option value="수산">수산</option>
+                                <option value="가공식품">가공식품</option>
+                                <option value="생필품">생필품</option>
+                            </datalist>
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('category')}" th:errors="*{category}"></div>
+                        </div>
+
+                        <div class="col-6">
+                            <label for="unit" class="form-label fw-semibold">판매 단위/규격 *</label>
+                            <input type="text" id="unit" th:field="*{unit}" class="form-control"
+                                   th:classappend="${#fields.hasErrors('unit')} ? 'is-invalid' : ''"
+                                   placeholder="예: 1kg, 1박스, 500g">
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('unit')}" th:errors="*{unit}"></div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="regularPrice" class="form-label fw-semibold">정상 판매가 (원) *</label>
+                        <input type="number" id="regularPrice" th:field="*{regularPrice}" class="form-control" min="0" step="10"
+                               th:classappend="${#fields.hasErrors('regularPrice')} ? 'is-invalid' : ''"
+                               placeholder="예: 15000">
+                        <div class="form-text small text-muted">공동구매 할인 전 일반 매장 판매 기준가입니다.</div>
+                        <div class="invalid-feedback" th:if="${#fields.hasErrors('regularPrice')}" th:errors="*{regularPrice}"></div>
+                    </div>
+
+                    <!-- 이미지 업로드 옵션 (내 컴퓨터 파일 선택 or 웹 URL) -->
+                    <div class="mb-3 p-3 bg-white border rounded">
+                        <label class="form-label fw-semibold mb-2">상품 이미지 등록</label>
+
+                        <div class="mb-2">
+                            <label for="imageFile" class="form-label small text-secondary">1) 내 컴퓨터 폴더에서 파일 찾기</label>
+                            <input type="file" id="imageFile" th:field="*{imageFile}" class="form-control"
+                                   accept="image/png, image/jpeg, image/jpg, image/gif, image/webp">
+                        </div>
+
+                        <div class="text-center my-2 text-muted small">또는</div>
+
+                        <div>
+                            <label for="imageUrl" class="form-label small text-secondary">2) 웹 이미지 주소(URL) 직접 입력</label>
+                            <input type="url" id="imageUrl" th:field="*{imageUrl}" class="form-control"
+                                   th:classappend="${#fields.hasErrors('imageUrl')} ? 'is-invalid' : ''"
+                                   placeholder="예: https://example.com/apple.jpg">
+                            <div class="invalid-feedback" th:if="${#fields.hasErrors('imageUrl')}" th:errors="*{imageUrl}"></div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="description" class="form-label fw-semibold">상품 상세 설명</label>
+                        <textarea id="description" th:field="*{description}" class="form-control" rows="3"
+                                  placeholder="산지 직송으로 당도가 높고 신선한 사과입니다."></textarea>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-success flex-fill">등록하기</button>
+                        <a th:href="@{/seller/stores/{id}/products(id=${store.id})}" class="btn btn-outline-secondary">취소</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
