@@ -272,7 +272,7 @@ Settings → Build Tools → Maven → Maven home path를
 - 별도의 POST 로그인 컨트롤러를 만들지 않습니다.
 - CustomUserDetailsService가 이메일을 정리해 DB 회원을 조회하고 LoginUser를 반환합니다.
 - Spring Security가 PasswordEncoder로 입력 비밀번호와 DB 해시를 비교합니다.
-- 성공하면 항상 `/`로 이동합니다.
+- 로그인 성공 시 역할별 핸들러(`RoleBasedLoginSuccessHandler`)에 의해 이동합니다. (SELLER: `/seller/stores`, CUSTOMER: `/`)
 - 실패하면 `/login?error`에서 공통 오류를 표시합니다.
 - 정지·탈퇴 계정의 신규 로그인을 차단합니다.
 - 로그인 실패 원인을 세부적으로 구분해 계정 존재 여부를 알리지 않습니다.
@@ -320,7 +320,50 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 기존 세션 강제 만료는 아직 구현하지 않았습니다.
 - 세션은 현재 서버 메모리에 저장하므로 서버 재시작 후 재로그인이 필요할 수 있습니다.
 
-## 10. 판매자 매장 및 상품 관리 (5번 기능)
+## 10. 고객·판매자 권한 처리 (4번 기능)
+
+### 접근 정책
+
+| 사용자 | `/seller/**` 접근 |
+|---|---|
+| 비로그인 | 로그인 화면으로 이동 |
+| CUSTOMER | 403 접근 거부 |
+| SELLER | 접근 허용 |
+| ADMIN | 현재 판매자 접근 권한 없음 |
+
+판매자 경로는 `hasRole("SELLER")`로 제한합니다.
+관리자 권한이 판매자 권한을 자동으로 포함하지는 않습니다.
+
+### 로그인 후 이동
+
+- SELLER: `/seller/stores`
+- CUSTOMER 및 그 외 계정: `/`
+- 로그인 전 방문 주소보다 권한별 시작 화면을 우선합니다.
+- `RoleBasedLoginSuccessHandler`에서 이동 주소를 결정합니다.
+
+### 접근 거부 화면
+
+- 접근 권한이 없으면 HTTP 403을 반환합니다.
+- `templates/error/403.html`에서 안내 화면을 표시합니다.
+- 화면의 홈 버튼을 통해 `/`로 이동할 수 있습니다.
+
+### 팀 개발 시 참고 사항
+
+- 로그인 사용자 정보는 `@AuthenticationPrincipal LoginUser`로 받습니다.
+- 회원가입 기본 권한은 CUSTOMER입니다.
+- 판매자 테스트 계정은 각자 로컬 DB에서 role을 SELLER로 변경합니다.
+- DB에서 권한을 변경한 뒤에는 로그아웃 후 다시 로그인해야 합니다.
+- 5번: 매장·상품 관리에도 동일한 판매자 경로 제한이 있으므로 병합 시 중복 없이 유지합니다.
+- 판매자 역할 확인과 개별 매장·상품의 소유권 검사는 별개입니다. 소유권 검사는 해당 기능에서 유지해야 합니다.
+
+### 수동 검증 결과
+
+- 판매자 로그인 후 `/seller/stores`로 이동 확인
+- 구매자의 판매자 경로 접근 시 403 확인
+- 403 안내 화면 표시 확인
+- 비로그인 상태의 판매자 경로 접근 시 로그인 화면 이동 확인
+
+## 11. 판매자 매장 및 상품 관리 (5번 기능)
 
 ### 지원 기능 및 엔드포인트
 
@@ -345,7 +388,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 타인의 매장 또는 상품에 대한 접근 및 수정 시도시 `403 FORBIDDEN` 예외를 발생시켜 비인가 접근을 차단합니다.
 - 4번 권한 기능(판매자 역할 체크) 병합 전이라도 현재 로그인한 계정으로 즉시 매장과 상품을 생성하고 CRUD를 테스트할 수 있습니다.
 
-## 11. 판매자 공동구매 모집 관리 (6번 기능)
+## 12. 판매자 공동구매 모집 관리 (6번 기능)
 
 ### 지원 기능 및 엔드포인트
 
