@@ -1,10 +1,12 @@
 package com.siheung.hanbaguni.controller;
 
 import com.siheung.hanbaguni.dto.ProductForm;
+import com.siheung.hanbaguni.entity.GroupPurchase;
 import com.siheung.hanbaguni.entity.Product;
 import com.siheung.hanbaguni.entity.Store;
 import com.siheung.hanbaguni.security.LoginUser;
 import com.siheung.hanbaguni.service.FileStorageService;
+import com.siheung.hanbaguni.service.GroupPurchaseService;
 import com.siheung.hanbaguni.service.ProductService;
 import com.siheung.hanbaguni.service.StoreService;
 import jakarta.validation.Valid;
@@ -15,7 +17,9 @@ import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Controller
 @RequestMapping("/seller/stores/{storeId}/products")
@@ -24,14 +28,17 @@ public class SellerProductController {
     private final ProductService productService;
     private final StoreService storeService;
     private final FileStorageService fileStorageService;
+    private final GroupPurchaseService groupPurchaseService;
 
     public SellerProductController(
             ProductService productService,
             StoreService storeService,
-            FileStorageService fileStorageService) {
+            FileStorageService fileStorageService,
+            GroupPurchaseService groupPurchaseService) {
         this.productService = productService;
         this.storeService = storeService;
         this.fileStorageService = fileStorageService;
+        this.groupPurchaseService = groupPurchaseService;
     }
 
     @GetMapping
@@ -42,9 +49,24 @@ public class SellerProductController {
 
         Store store = storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
         List<Product> products = productService.findProductsByStoreId(storeId);
+        List<GroupPurchase> groupPurchases = groupPurchaseService.findByStoreId(storeId);
+
+        // 상품별 공동구매 매핑 (진행중/초안 우선 매핑)
+        Map<Long, GroupPurchase> groupPurchaseByProductId = new HashMap<>();
+        for (GroupPurchase gp : groupPurchases) {
+            Long productId = gp.getProduct().getId();
+            GroupPurchase existing = groupPurchaseByProductId.get(productId);
+            if (existing == null) {
+                groupPurchaseByProductId.put(productId, gp);
+            } else if (existing.getStatus() == GroupPurchase.Status.CLOSED
+                    && (gp.getStatus() == GroupPurchase.Status.OPEN || gp.getStatus() == GroupPurchase.Status.DRAFT)) {
+                groupPurchaseByProductId.put(productId, gp);
+            }
+        }
 
         model.addAttribute("store", store);
         model.addAttribute("products", products);
+        model.addAttribute("groupPurchaseMap", groupPurchaseByProductId);
         return "seller/product/list";
     }
 
