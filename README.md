@@ -31,9 +31,11 @@
 - 비로그인 사용자의 비공개 주소 접근 시 로그인 화면으로 이동
 - 판매자 매장 등록 및 정보 수정 (소유권 검증 포함)
 - 판매자 상품 등록, 목록 조회, 정보 수정 및 판매상태 관리 (이미지 업로드 및 삭제 지원)
-- 판매자 공동구매 모집 등록, 초안 저장(DRAFT), 정식 게시(OPEN), 수정 및 삭제 관리
+- 판매자 공동구매 모집 등록, 초안 저장(DRAFT), 정식 게시(OPEN), 수정 및 삭제 관리 (6번 기능)
+- 구매자 공동구매 탐색·조회 (7번 기능)
+- 공동구매 주문 수량 예약, 동시성 선점 제어, 타임아웃 만료 및 예약 취소 (8번 기능)
 
-역할별 접근 제한과 주문, 결제는 아직 구현되지 않았습니다.
+결제(9번) 기능은 다음 단계로 연동 예정입니다.
 
 ## 1. Java 설정
 
@@ -95,6 +97,7 @@ Workbench에서 프로젝트 DB에 연결한 뒤 다음 파일을 순서대로 �
 2. `database/002-add-unique-nickname.sql`: 닉네임 중복 금지 제약 추가
 3. `database/003-create-stores-and-products.sql`: 매장 및 상품 테이블 생성
 4. `database/004-create-group-purchases.sql`: 공동구매 모집 테이블 생성
+5. `database/005-create-orders.sql`: 주문 및 수량 예약 테이블 생성 (8번 기능용)
 
 회원가입 및 매장/상품/공동구매 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
 파일을 GitHub에서 받는 것만으로 DB에 반영되지는 않습니다.
@@ -137,6 +140,9 @@ IntelliJ에서 `HanbaguniApplication`을 실행합니다.
 | 상태 확인 | http://localhost:8080/actuator/health |
 | 내 매장 관리 (판매자) | http://localhost:8080/seller/stores |
 | 새 매장 등록 (판매자) | http://localhost:8080/seller/stores/new |
+| 공개 공동구매 둘러보기 | http://localhost:8080/group-purchases |
+| 내 주문 및 수량 예약 목록 | http://localhost:8080/orders |
+| 공동구매 수량 예약 신청 | http://localhost:8080/orders/new |
 
 상태 확인 응답의 `status`가 `UP`이면 등록된 상태 검사 기준으로 정상입니다.
 
@@ -401,7 +407,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 | 공동구매 수정 처리 | POST | `/seller/stores/{storeId}/group-purchases/{id}/edit` | 공동구매 조건 및 상태(`DRAFT`/`OPEN`/`CLOSED`) 갱신 |
 | 초안 즉시 게시 | POST | `/seller/stores/{storeId}/group-purchases/{id}/publish` | 초안(`DRAFT`) 상태의 모집을 즉시 공개(`OPEN`)로 전환 |
 | 모집 상태 간편 변경 | POST | `/seller/stores/{storeId}/group-purchases/{id}/status` | 목록 화면에서 원클릭으로 상태(`DRAFT`/`OPEN`/`CLOSED`) 전환 |
-| 공동구매 삭제 | POST | `/seller/stores/{storeId}/group-purchases/{id}/delete` | 참여자가 없는(`current_quantity == 0`) 공동구매 삭제 처리 |
+| 공동구매 삭제 | POST | `/seller/stores/{storeId}/group-purchases/{id}/delete` | 참여자 및 주문 내역이 없는 공동구매 삭제 처리 |
 
 ### 주요 정책 및 검증 규칙
 
@@ -410,6 +416,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - **1인당 제한 수량 선택 설정**: `limit_per_user`는 선택 사항(기본값 제한 없음/`NULL`)으로, 사재기 방지가 필요한 특가 상품에 한해 설정할 수 있습니다.
 - **양방향 일수 계산 UI**: 모집 기간과 매장 수령 기간 설정 시 일수(예: 3일간)를 입력하면 마감 일시가 자동 계산되고, 반대로 마감 일시를 직접 지정하면 몇 일 동안 진행되는지 자동으로 역계산되어 표시됩니다.
 - **상품 관리 탭 연동**: 상품 목록 화면(`/seller/stores/{storeId}/products`)에서 각 상품의 공동구매 상태(`미등록`, `공동구매 모집 초안`, `공동구매 모집중`, `공동구매 마감`)가 동적 버튼으로 표시됩니다.
+- **외래키 제약조건 보호**: 예약 또는 주문 내역이 존재하는 공동구매는 삭제 시 외래키 위반 에러를 방지하기 위해 400 에러로 차단됩니다.
 
 ## 13. 구매자 공동구매 조회 (7번 기능)
 
@@ -472,4 +479,38 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 조회 통합 테스트와 기존 서비스 테스트 실행: `.\mvnw.cmd "-Dtest=GroupPurchaseBrowseIntegrationTest,*ServiceTest" test`
 - 통합 테스트는 별도 H2 메모리 DB를 사용하며 비회원 목록·상세 실제 HTML, 이미지 유무, 공개 대상 필터, 판매자 접근 제한을 확인합니다. 로컬 MySQL 검증은 별도로 진행합니다.
 
+## 14. 공동구매 주문 수량 예약 및 선점 관리 (8번 기능)
 
+### 지원 기능 및 엔드포인트
+
+| 기능 | HTTP 메서드 | 요청 주소 | 설명 |
+|---|---|---|---|
+| 내 주문·예약 목록 | GET | `/orders` | 로그인한 구매자의 전체 주문/예약 이력 및 상태 확인 |
+| 예약 대상 공구 선택 | GET | `/orders/new` | 현재 모집 중인 공동구매 목록 중 수량을 예약할 공구 선택 |
+| 수량 예약 신청 화면 | GET | `/orders/new?groupPurchaseId={id}` | 단가, 잔여 수량, 1인당 구매 제한을 확인하고 수량을 선택하는 폼 |
+| 수량 예약 신청 처리 | POST | `/orders/new` | 비관적 락으로 수량을 안전하게 선점하고 15분 결제 대기(`PENDING`) 주문 생성 |
+| 주문·예약 상세 화면 | GET | `/orders/{orderId}` | 주문 상세 정보, 수령 안내, 결제 만료 카운트다운 타이머 제공 |
+| 수량 예약 취소 처리 | POST | `/orders/{orderId}/cancel` | `PENDING` 상태의 예약 취소 및 선점 수량 즉시 반환 |
+| REST: 수량 예약 생성 | POST | `/api/v1/orders` | REST API 기반 수량 예약 주문 생성 (JSON 응답) |
+| REST: 내 주문 목록 | GET | `/api/v1/orders` | 로그인한 사용자의 주문 목록 조회 |
+| REST: 단일 주문 상세 | GET | `/api/v1/orders/{orderId}` | 단일 주문 상세 JSON 조회 |
+| REST: 수량 예약 취소 | POST | `/api/v1/orders/{orderId}/cancel-reservation` | REST API 기반 예약 취소 (선점 수량 반환) |
+
+### 주요 정책 및 무결성 보장
+
+- **비관적 쓰기 락(PESSIMISTIC_WRITE) 기반 동시성 제어**:
+  - 다수의 사용자가 동시에 마지막 남은 재고를 주문하더라도 `GroupPurchase` 행 락을 획득하여 **초과 예약(Overselling)을 원천 차단**합니다.
+  - 예약 취소 시에도 `Order` 행 락을 획득하여 취소 처리와 결제 완료 처리의 동시 충돌을 방지합니다.
+- **실시간 재고 선점 및 타임아웃 만료(15분 Hold)**:
+  - 주문 생성 시 기본 15분(`RESERVATION_HOLD_MINUTES`) 동안 수량을 선점하며 상태는 `PENDING`이 됩니다.
+  - 공동구매 마감 시각(`endAt`)이 15분 미만으로 남은 경우 선점 기한(`reservedUntil`)을 마감 시각으로 제한합니다.
+  - 선점 기한이 지난 주문은 신규 예약 및 조회 시점에 자동으로 `EXPIRED`로 전환되어 다른 사용자를 위한 잔여 수량으로 즉시 환원됩니다.
+- **1인당 구매 제한(`limit_per_user`) 검증 및 사용자 알림**:
+  - 사용자의 확정 수량 + 유효 예약 수량 합계가 `limit_per_user`를 초과할 수 없도록 서버에서 철저히 검증합니다.
+  - 화면에서도 초과 수량을 선택하거나 제출 시 브라우저 경고 알림(`alert`)을 띄우고 폼 전송을 차단합니다.
+- **소유권 및 자전거래 검증**:
+  - 본인의 주문만 조회 및 취소할 수 있으며, 타인 주문 접근 시 `403 FORBIDDEN`을 반환합니다.
+  - 판매자가 본인이 운영하는 매장의 공동구매에 예약하려 할 경우 `400 BAD_REQUEST`로 차단합니다.
+- **가독성 최적화**:
+  - 상품 단위(`unit`)가 `"30개"`, `"10개"` 등 숫자가 포함된 경우 화면에 숫자가 겹쳐 보이던 문제를 개선하여, 상단 상품명에만 단위를 명시하고 수량 영역은 순수 숫자만 깔끔하게 출력합니다.
+- **DB 스키마 추가**: `database/005-create-orders.sql` (주문 테이블 생성)

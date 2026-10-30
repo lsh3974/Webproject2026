@@ -32,6 +32,11 @@
 
         <div sec:authorize="isAuthenticated()"
              class="d-flex align-items-center gap-3">
+            <!-- 8번 기능: 내 주문·수량 예약 내역 링크 -->
+            <a th:href="@{/orders}" class="btn btn-outline-primary btn-sm">
+                내 주문·예약
+            </a>
+
             <!-- 판매자(ROLE_SELLER) 권한이 있는 사용자에게만 매장 관리 버튼 표시 -->
             <a sec:authorize="hasRole('SELLER')"
                th:href="@{/seller/stores}" class="btn btn-outline-success btn-sm">
@@ -64,7 +69,10 @@
         <div class="card-body p-4">
             <h2 id="campaign-heading" class="h5">모집 중인 공동구매</h2>
             <p class="text-secondary">가까운 매장에서 진행 중인 공동구매를 확인하세요.</p>
-            <a th:href="@{/group-purchases}" class="btn btn-success">공동구매 둘러보기</a>
+            <div class="d-flex flex-wrap gap-2">
+                <a th:href="@{/group-purchases}" class="btn btn-success">공동구매 둘러보기</a>
+                <a sec:authorize="isAuthenticated()" th:href="@{/orders}" class="btn btn-outline-dark">내 주문·예약 내역</a>
+            </div>
         </div>
     </section>
 </main>

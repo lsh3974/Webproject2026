@@ -34,7 +34,10 @@
             </dl>
             <section class="pickup-panel"><h2>매장 수령 안내</h2><p><strong th:text="${purchase.storeName}">매장명</strong><br><span th:text="${purchase.address}">수령 주소</span></p><p class="pickup-dates"><span th:text="${#temporals.format(purchase.pickupStartAt, 'yyyy.MM.dd HH:mm')}"></span><br>~ <span th:text="${#temporals.format(purchase.pickupEndAt, 'yyyy.MM.dd HH:mm')}"></span></p><p class="multiline" th:if="${purchase.pickupNotice != null and !#strings.isEmpty(purchase.pickupNotice)}" th:text="${purchase.pickupNotice}">수령 안내</p></section>
             <p class="order-notice">현재는 모집 정보 조회만 제공하며, 주문 신청은 아직 지원하지 않습니다.</p>
-            <a class="btn btn-primary btn-wide" th:href="@{/group-purchases}">다른 공동구매 둘러보기 <span aria-hidden="true">→</span></a>
+            <div class="d-grid gap-2" style="margin-top: 1rem;">
+                <a class="btn btn-primary btn-wide" th:href="@{/orders/new(groupPurchaseId=${purchase.id})}">수량 예약하기 <span aria-hidden="true">→</span></a>
+                <a class="btn btn-secondary btn-wide" th:href="@{/group-purchases}">다른 공동구매 둘러보기</a>
+            </div>
         </section>
     </div>
 </main>
