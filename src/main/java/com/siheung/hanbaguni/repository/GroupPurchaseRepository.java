@@ -15,4 +15,9 @@ public interface GroupPurchaseRepository extends JpaRepository<GroupPurchase, Lo
     List<GroupPurchase> findByStatusOrderByIdDesc(GroupPurchase.Status status);
 
     Optional<GroupPurchase> findByIdAndStoreId(Long id, Long storeId);
+
+    // 동시성 제어를 위한 비관적 락(Pessimistic Lock) 조회 쿼리
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT gp FROM GroupPurchase gp WHERE gp.id = :id")
+    Optional<GroupPurchase> findByIdWithLock(@Param("id") Long id);
 }
