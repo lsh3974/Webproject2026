@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>공동구매 수량 예약 신청 - 시흥한바구니</title>
+    <title th:text="'수량 예약 - ' + ${summary.title} + ' - 시흥한바구니'">수량 예약 - 시흥한바구니</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
           integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
 </head>
@@ -21,31 +21,23 @@
     </div>
 </nav>
 
-<main class="container py-5">
+<main class="container py-4 py-md-5">
+    <!-- 헤더 -->
     <div class="mb-4">
-        <span class="badge bg-success-subtle text-success border border-success-subtle mb-2">주문 · 수량 예약</span>
-        <h1 class="h2 fw-bold mb-1">공동구매 수량 예약 신청</h1>
-        <p class="text-secondary mb-0">
-            원하는 수량을 예약하면 <strong th:text="${holdMinutes} + '분 동안'">15분 동안</strong> 재고가 안전하게 선점됩니다.
-        </p>
-    </div>
-
-    <!-- 에러 메시지 알림 -->
-    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
-        <span th:text="${errorMessage}">오류 메시지</span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="닫기"></button>
+        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 mb-2">주문 · 수량 예약</span>
+        <h1 class="h3 fw-bold mb-1">공동구매 수량 예약 신청</h1>
+        <p class="text-secondary small mb-0">원하는 수량을 예약하면 <strong th:text="${holdMinutes} + '분 동안'">15분 동안</strong> 재고가 안전하게 선점됩니다.</p>
     </div>
 
     <div class="row g-4">
-        <!-- 좌측: 공동구매 정보 카드 -->
+        <!-- 좌측: 공동구매 및 매장 정보 요약 카드 -->
         <div class="col-12 col-lg-7">
             <div class="card border-0 shadow-sm h-100">
-                <div class="card-body p-4">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="badge bg-success-subtle text-success border border-success-subtle"
-                              th:text="${summary.storeName}">매장명</span>
-                        <span class="badge bg-light text-secondary border"
-                              th:text="${summary.category}">카테고리</span>
+                <div class="card-body p-4 p-md-5">
+                    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                        <span class="badge bg-light text-dark border px-2 py-1" th:text="${summary.storeName}">매장명</span>
+                        <span class="badge bg-secondary-subtle text-secondary"
+                              th:if="${summary.category != null}" th:text="${summary.category}">카테고리</span>
                     </div>
 
                     <h2 class="h4 fw-bold mb-1" th:text="${summary.title}">공동구매 제목</h2>
@@ -61,32 +53,43 @@
                                       th:text="${#numbers.formatInteger(summary.regularPrice, 1, 'COMMA')} + '원'">10,000원</span>
                                 <strong class="fs-4 text-success"
                                         th:text="${#numbers.formatInteger(summary.groupPrice, 1, 'COMMA')} + '원'">8,500원</strong>
-                                <span class="text-secondary small" th:text="'/ ' + ${summary.unit}">/ 개</span>
+                                <span class="text-secondary small" th:text="'/ 1' + ${summary.unit}">/ 1개</span>
                             </div>
                         </div>
 
-                        <hr class="my-2">
+                        <!-- 전체 모집 수량 안내 -->
+                        <div class="bg-white border rounded-2 p-2 px-3 small text-muted d-flex justify-content-between align-items-center mb-3">
+                            <span><strong class="text-dark">전체 모집 현황</strong> (단위: <span th:text="${summary.unit}">개</span>)</span>
+                            <span>
+                                목표 <strong class="text-dark" th:text="${summary.targetQuantity}">10</strong>
+                                · 최대 모집 <strong class="text-dark" th:text="${summary.maxQuantity}">30</strong>
+                            </span>
+                        </div>
 
+                        <!-- 수량 현황 3칸 -->
                         <div class="row text-center g-2 pt-1">
                             <div class="col-4">
-                                <div class="text-muted small">결제 확정</div>
-                                <div class="fw-bold" th:text="${summary.confirmedQuantity} + ' ' + ${summary.unit}">0 개</div>
+                                <div class="text-muted small mb-1">결제 확정</div>
+                                <div class="fs-5 fw-bold text-dark">
+                                    <span th:text="${summary.confirmedQuantity}">0</span>
+                                    <span class="fs-6 fw-normal text-muted" th:text="${summary.unit}">개</span>
+                                </div>
                             </div>
                             <div class="col-4 border-start border-end">
-                                <div class="text-muted small">예약 선점중</div>
-                                <div class="fw-bold text-primary" th:text="${summary.reservedPendingQuantity} + ' ' + ${summary.unit}">0 개</div>
+                                <div class="text-muted small mb-1">예약 선점중</div>
+                                <div class="fs-5 fw-bold text-primary">
+                                    <span th:text="${summary.reservedPendingQuantity}">0</span>
+                                    <span class="fs-6 fw-normal text-muted" th:text="${summary.unit}">개</span>
+                                </div>
                             </div>
                             <div class="col-4">
-                                <div class="text-muted small">잔여 가능 수량</div>
-                                <div class="fw-bold"
-                                     th:classappend="${summary.remainingQuantity > 0 ? 'text-success' : 'text-danger'}"
-                                     th:text="${summary.remainingQuantity} + ' ' + ${summary.unit}">10 개</div>
+                                <div class="text-muted small mb-1">잔여 가능 수량</div>
+                                <div class="fs-5 fw-bold"
+                                     th:classappend="${summary.remainingQuantity > 0 ? 'text-success' : 'text-danger'}">
+                                    <span th:text="${summary.remainingQuantity}">10</span>
+                                    <span class="fs-6 fw-normal text-muted" th:text="${summary.unit}">개</span>
+                                </div>
                             </div>
-                        </div>
-
-                        <div class="mt-2 small text-muted text-end">
-                            목표 수량 <span th:text="${summary.targetQuantity} + ' ' + ${summary.unit}">10 개</span> ·
-                            최대 모집 <span th:text="${summary.maxQuantity} + ' ' + ${summary.unit}">30 개</span>
                         </div>
                     </div>
 
@@ -143,15 +146,17 @@
 
                         <div th:if="${summary.limitPerUser != null}"
                              class="alert alert-info py-2 px-3 small mb-3">
-                            <div>
-                                1인당 최대 구매 제한:
-                                <strong th:text="${summary.limitPerUser} + ' ' + ${summary.unit}">3 개</strong>
+                            <div class="d-flex justify-content-between">
+                                <span>1인당 최대 구매 제한</span>
+                                <strong><span th:text="${summary.limitPerUser}">3</span> <span th:text="${summary.unit}">개</span></strong>
                             </div>
-                            <div th:if="${summary.userActiveQuantity > 0}" class="text-muted mt-1">
-                                (이미 예약/구매한 수량: <span th:text="${summary.userActiveQuantity} + ' ' + ${summary.unit}">0 개</span>)
+                            <div th:if="${summary.userActiveQuantity > 0}" class="d-flex justify-content-between text-muted mt-1">
+                                <span>내 기존 주문 수량</span>
+                                <span><span th:text="${summary.userActiveQuantity}">0</span> <span th:text="${summary.unit}">개</span></span>
                             </div>
-                            <div class="text-success fw-semibold mt-1">
-                                (추가 가능 <strong th:text="${summary.userOrderableMaxQuantity} + ' ' + ${summary.unit}">3 개</strong>)
+                            <div class="d-flex justify-content-between text-success fw-semibold mt-1 pt-1 border-top border-info-subtle">
+                                <span>이번에 추가 예약 가능</span>
+                                <span><span th:text="${summary.userOrderableMaxQuantity}">3</span> <span th:text="${summary.unit}">개</span></span>
                             </div>
                         </div>
 
@@ -165,7 +170,7 @@
                                 <input type="number"
                                        id="quantityInput"
                                        th:field="*{quantity}"
-                                       class="form-control text-center fw-bold"
+                                       class="form-control text-center fw-bold fs-5"
                                        min="1"
                                        th:attr="max=${summary.userOrderableMaxQuantity > 0 ? summary.userOrderableMaxQuantity : 1}"
                                        th:disabled="${!summary.orderable}"
@@ -177,7 +182,7 @@
                                  th:if="${#fields.hasErrors('quantity')}"
                                  th:errors="*{quantity}">수량 오류</div>
                             <div class="form-text" th:if="${summary.orderable}">
-                                최대 <span th:text="${summary.userOrderableMaxQuantity} + ' ' + ${summary.unit}">10 개</span>까지 예약 가능합니다.
+                                최대 <strong class="text-dark" th:text="${summary.userOrderableMaxQuantity}">10</strong><span th:text="${summary.unit}">개</span>까지 예약 가능합니다.
                             </div>
                         </div>
 
@@ -185,8 +190,8 @@
                             <div class="d-flex justify-content-between small text-secondary mb-1">
                                 <span>단가 × 수량</span>
                                 <span id="priceFormulaText"
-                                      th:text="${#numbers.formatInteger(summary.groupPrice, 1, 'COMMA')} + '원 × 1 ' + ${summary.unit}">
-                                    8,500원 × 1 개
+                                      th:text="${#numbers.formatInteger(summary.groupPrice, 1, 'COMMA')} + '원 × 1' + ${summary.unit}">
+                                    8,500원 × 1개
                                 </span>
                             </div>
                             <div class="d-flex justify-content-between align-items-center">
@@ -240,7 +245,7 @@
                 val = maxQty;
             }
             const total = unitPrice * val;
-            formulaEl.textContent = unitPrice.toLocaleString('ko-KR') + '원 × ' + val + ' ' + unitLabel;
+            formulaEl.textContent = unitPrice.toLocaleString('ko-KR') + '원 × ' + val + unitLabel;
             totalEl.textContent = total.toLocaleString('ko-KR') + '원';
         }
 
@@ -281,4 +286,3 @@
         crossorigin="anonymous"></script>
 </body>
 </html>
-
