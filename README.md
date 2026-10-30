@@ -461,4 +461,15 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - `templates/group-purchases/`: 목록·상세·공통 헤더/푸터.
 - `static/css/group-purchases.css`, `static/images/catalog-hero.webp`: 화면 리소스.
 - `index.html`: 홈에 목록 진입 링크 추가.
+ㅎ
+## 수정 사항
+
+- 비회원도 GET `/group-purchases`, `/group-purchases/{id}`를 조회할 수 있습니다.
+- 목록과 상세는 모두 OPEN이고 모집 기간 안에 있으며, 매장이 ACTIVE이고 상품이 ON_SALE인 경우만 공개합니다. 그 외 상세는 404입니다.
+- 기존 `/seller/**` SELLER 제한, 나머지 주소의 인증 제한, CSRF, 역할별 로그인 성공 처리를 유지합니다.
+- `GroupPurchaseView.imageUrl`은 상품의 `imageUrl`을 전달합니다. 이미지가 없는 상세도 정상 렌더링합니다.
+- 새 DB 컬럼이나 SQL 변경은 없습니다. H2는 test 범위로만 사용하고 실행 DB는 기존 MySQL입니다.
+- 조회 통합 테스트와 기존 서비스 테스트 실행: `.\mvnw.cmd "-Dtest=GroupPurchaseBrowseIntegrationTest,*ServiceTest" test`
+- 통합 테스트는 별도 H2 메모리 DB를 사용하며 비회원 목록·상세 실제 HTML, 이미지 유무, 공개 대상 필터, 판매자 접근 제한을 확인합니다. 로컬 MySQL 검증은 별도로 진행합니다.
+
 
