@@ -142,6 +142,16 @@ public class GroupPurchase {
         }
     }
 
+    // 결제 승인 시 참여 수량 증가
+    public void addQuantity(int quantity) {
+        this.currentQuantity += quantity;
+    }
+
+    // 결제 취소 시 참여 수량 원복 (마이너스 방지)
+    public void subtractQuantity(int quantity) {
+        this.currentQuantity = Math.max(0, this.currentQuantity - quantity);
+    }
+
     public enum Status {
         DRAFT, OPEN, SUCCESS, FAILED, CLOSED
     }

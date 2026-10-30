@@ -29,11 +29,13 @@
 - POST 로그아웃과 세션 종료
 - 정지·탈퇴 계정의 신규 로그인 차단
 - 비로그인 사용자의 비공개 주소 접근 시 로그인 화면으로 이동
+- 고객·판매자 역할별 접근 제한
 - 판매자 매장 등록 및 정보 수정 (소유권 검증 포함)
 - 판매자 상품 등록, 목록 조회, 정보 수정 및 판매상태 관리 (이미지 업로드 및 삭제 지원)
 - 판매자 공동구매 모집 등록, 초안 저장(DRAFT), 정식 게시(OPEN), 수정 및 삭제 관리
+- 주문 결제 승인 및 취소 상태 처리, 공동구매 참여 수량 연동
 
-역할별 접근 제한과 주문, 결제는 아직 구현되지 않았습니다.
+결제 API는 현재 외부 결제 대행사와 실제 승인·환불을 수행하는 연동이 아니라, 요청을 받아 내부 주문 상태와 공동구매 수량을 갱신하는 단계입니다.
 
 ## 1. Java 설정
 
@@ -313,7 +315,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 회원 ID와 권한은 클라이언트가 보낸 값을 신뢰하지 말고 인증 정보에서 가져옵니다.
 - LoginUser 자체를 응답이나 로그로 출력하지 않고 필요한 필드만 사용합니다.
 - 현재 비공개 주소는 로그인 여부만 검사합니다.
-- 판매자 전용 접근 제한과 자기 매장·본인 주문 확인은 별도로 구현해야 합니다.
+- 판매자 전용 접근 제한과 매장 소유권 검증은 구현되어 있습니다. 결제 API의 주문 소유권 검증은 별도로 보완해야 합니다.
 - 권한 정보가 있다는 것만으로 역할별 접근 제한이 자동 완성되는 것은 아닙니다.
 - 세션에는 로그인 시점의 회원 정보가 들어갑니다.
 - DB에서 상태·역할·닉네임을 바꿔도 기존 세션에 즉시 반영되지 않습니다.
@@ -410,3 +412,86 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - **1인당 제한 수량 선택 설정**: `limit_per_user`는 선택 사항(기본값 제한 없음/`NULL`)으로, 사재기 방지가 필요한 특가 상품에 한해 설정할 수 있습니다.
 - **양방향 일수 계산 UI**: 모집 기간과 매장 수령 기간 설정 시 일수(예: 3일간)를 입력하면 마감 일시가 자동 계산되고, 반대로 마감 일시를 직접 지정하면 몇 일 동안 진행되는지 자동으로 역계산되어 표시됩니다.
 - **상품 관리 탭 연동**: 상품 목록 화면(`/seller/stores/{storeId}/products`)에서 각 상품의 공동구매 상태(`미등록`, `공동구매 모집 초안`, `공동구매 모집중`, `공동구매 마감`)가 동적 버튼으로 표시됩니다.
+
+## 13. 주문 및 결제 (Phase 9·10)
+
+### 기능 개요
+
+- **결제 승인**: 주문을 조회하고 결제 금액이 요청에 포함된 경우 주문 금액과 비교합니다. 승인 시 주문 상태를 `PAID`로 변경하고, 결제 키가 제공되면 저장하며, 연결된 공동구매의 `current_quantity`를 주문 수량만큼 증가시킵니다.
+- **취소 처리**: 주문 상태를 `CANCELLED`로 변경하고 취소 사유를 저장하며, 공동구매의 `current_quantity`를 주문 수량만큼 감소시킵니다. 감소 결과가 음수가 되지 않도록 보정합니다.
+- **트랜잭션**: 승인·취소 서비스는 `@Transactional`로 처리되어 주문과 공동구매 수량 변경을 하나의 DB 트랜잭션으로 묶습니다.
+- **오류 응답**: 없는 주문/공동구매 및 금액 불일치는 `IllegalArgumentException`, 이미 처리된 상태는 `IllegalStateException`으로 처리합니다. `GlobalExceptionHandler`는 두 예외를 `400 Bad Request`로 응답합니다.
+
+### 데이터 매핑 및 연동
+
+`Order` 엔티티는 `orders` 테이블에 매핑됩니다. `database/005-create-orders.sql`과 엔티티의 주요 컬럼은 다음과 같습니다.
+
+| DB 컬럼 | 엔티티 필드 | 용도 |
+|---|---|---|
+| `id` | `id` | 주문 식별자 |
+| `user_id` | `userId` | 주문한 회원 |
+| `group_purchase_id` | `groupPurchaseId` | 연결된 공동구매 |
+| `quantity` | `quantity` | 주문 수량 |
+| `total_price` | `totalPrice` | 주문 금액 |
+| `status` | `status` | `PENDING`, `PAID`, `CANCELLED` 등 |
+| `payment_key` | `paymentKey` | 결제 대행사 결제 키 |
+| `cancel_reason` | `cancelReason` | 취소 사유 |
+| `created_at`, `updated_at` | `createdAt`, `updatedAt` | 생성·수정 시각 |
+
+`PaymentService`는 `OrderRepository`와 `GroupPurchaseRepository`를 사용해 주문 및 공동구매를 조회하고 갱신합니다. Hibernate 자동 스키마 변경은 비활성화되어 있으므로(`spring.jpa.hibernate.ddl-auto=none`), 로컬 DB에 SQL을 반영할 때 엔티티와 기존 테이블의 컬럼이 일치하는지 확인해야 합니다.
+
+### API 명세
+
+| 기능 | 메서드 및 경로 | 성공 응답 |
+|---|---|---|
+| 결제 승인 | `POST /api/v1/orders/{orderId}/payments/confirm` | `200 OK`, `결제가 성공적으로 승인되었습니다.` |
+| 취소·환불 상태 처리 | `POST /api/v1/orders/{orderId}/payments/cancel` | `200 OK`, `주문이 취소 및 환불 처리되었습니다. 사유: {cancelReason}` |
+
+승인 요청의 실제 DTO 필드는 `provider`, `providerPaymentKey`, `providerOrderRef`, `amountKrw`입니다. `amountKrw`는 원 단위 정수이며, `providerPaymentKey`가 있으면 `orders.payment_key`에 저장됩니다.
+
+```http
+POST /api/v1/orders/1/payments/confirm
+Content-Type: application/json
+Cookie: JSESSIONID=<로그인 세션>
+X-CSRF-TOKEN: <현재 세션의 CSRF 토큰>
+
+{
+  "provider": "TOSS_PAYMENTS",
+  "providerPaymentKey": "<결제 키>",
+  "providerOrderRef": "<주문 참조값>",
+  "amountKrw": 2222220
+}
+```
+
+취소 요청의 실제 DTO 필드는 `cancelAmountKrw`, `cancelReason`입니다.
+
+```http
+POST /api/v1/orders/1/payments/cancel
+Content-Type: application/json
+Cookie: JSESSIONID=<로그인 세션>
+X-CSRF-TOKEN: <현재 세션의 CSRF 토큰>
+
+{
+  "cancelAmountKrw": 2222220,
+  "cancelReason": "고객 요청에 따른 취소"
+}
+```
+
+### 인증 및 CSRF
+
+- 두 API는 `SecurityConfig`의 `.anyRequest().authenticated()` 정책에 따라 로그인 세션이 필요합니다. `/api/v1/orders/**`를 `permitAll()`로 공개하거나 CSRF 예외 경로로 지정하지 않았습니다.
+- POST 요청은 CSRF 보호 대상입니다. 먼저 같은 클라이언트·세션으로 `GET /login`을 호출해 HTML 폼의 `_csrf` 토큰을 얻고, 로그인 POST에는 `_csrf` 폼 필드로 보냅니다. 로그인 성공 후 갱신된 `JSESSIONID`를 사용하고, 해당 로그인 세션에서 새 토큰을 얻어 이후 POST 요청의 `X-CSRF-TOKEN` 헤더로 전달합니다.
+- 이 프로젝트는 현재 `ROLE_CUSTOMER` 자체를 결제 API의 접근 규칙으로 지정하지 않습니다. 로그인 여부 검증과 주문 소유권 검증은 별개이며, 현재 결제 서비스에는 요청자의 주문 소유권 확인이 없습니다.
+
+### 검증 결과와 현재 제한 사항
+
+브라우저에서 발급한 로그인 세션을 IntelliJ HTTP Client 요청에 연결해 결제 승인·취소 및 잘못된 금액, 중복 처리, 존재하지 않는 주문 등 정상·오류 시나리오를 검증했습니다.
+
+현재 구현에서 확인해야 할 제한 사항은 다음과 같습니다.
+
+- 외부 PG에 결제 승인·환불을 요청하거나 결제 결과를 검증하는 코드는 없습니다. 성공 응답은 현재 내부 DB 상태 변경을 의미하며, 실제 결제 완료를 보증하지 않습니다.
+- 승인 금액이 누락되면 금액 비교를 건너뜁니다. `provider`와 `providerOrderRef`는 DTO에 있지만 서비스에서 검증하지 않습니다.
+- 취소 요청의 `cancelAmountKrw`는 현재 서비스에서 사용하거나 검증하지 않습니다.
+- 중복 승인/취소 확인은 각각 현재 `PAID`/`CANCELLED` 상태만 검사합니다. 다른 상태 전이의 허용 여부를 포함해 상태 전이 규칙을 보강해야 합니다.
+- 트랜잭션은 단일 요청의 DB 변경을 묶지만, 동시 요청에서 중복 처리나 수량 경합을 방지하는 잠금·낙관적 버전 검사는 구현되어 있지 않습니다. 또한 승인 시 공동구매 최대 수량 초과 검증도 없습니다.
+- 주문 소유권 및 `ROLE_CUSTOMER` 검증, 실제 PG 검증, 필수 금액·취소 금액 검증을 운영 환경에 적용하기 전에 구현해야 합니다.

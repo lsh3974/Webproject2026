@@ -1,0 +1,104 @@
+### 이 요청을 먼저 실행하고 응답 HTML에서 _csrf 값 확인
+GET http://localhost:8080/login
+Cookie: JSESSIONID=2D33C3034C1BF5AF9A2E63A2BCC3D80F // 여긴 아무거나 됨
+
+### [사전 단계] 테스트용 계정으로 로그인하여 세션(Cookie) 쿠키 획득하기
+POST http://localhost:8080/login
+Content-Type: application/x-www-form-urlencoded
+Cookie: JSESSIONID=[방금 받은 쿠키 파일에 있는 문자열]
+
+email=customer1@gmail.com // 예시 이메일
+    &password=customer11234 // 예시 비번
+    &_csrf=[첫 요청의 응답 HTML에 있던 csrf value 문자열]
+
+### 다시 GET 요청을 보내어 응답 HTML에서 새로운 _csrf 값 확인
+GET http://localhost:8080/login
+Cookie: [아까 받은 쿠키 파일에 있는 문자열]
+
+### ===================================================
+### [정상 흐름 1] 결제 승인 테스트 (PENDING -> PAID)
+### ===================================================
+
+POST http://localhost:8080/api/v1/orders/1/payments/confirm
+Content-Type: application/json
+Cookie: JSESSIONID=[아까 받은 쿠키 파일에 있는 문자열]
+X-CSRF-TOKEN: [새로운 요청의 응답 HTML에 있던 csrf value 문자열]
+
+// 주의: 토스키는 임의이고, amountKrw는 실제 주문한 공동 구매 가격 * 주문 수량으로 변경 필요함
+{
+  "paymentKey": "toss_payment_key_2026_001",
+  "amountKrw": 2222220
+}
+
+### ===================================================
+### [정상 흐름 2] 결제 취소/환불 테스트 (PAID -> CANCELLED)
+### ===================================================
+POST http://localhost:8080/api/v1/orders/1/payments/cancel
+Content-Type: application/json
+Cookie: JSESSIONID=[아까 받은 쿠키 파일에 있는 문자열]
+X-CSRF-TOKEN: [새로운 요청의 응답 HTML에 있던 csrf value 문자열]
+
+{
+  "cancelAmountKrw": 2222220,
+  "cancelReason": "고객 단순 변심으로 인한 주문 취소"
+}
+
+
+### ===================================================
+### ⚠️ [엣지케이스 1] 결제 금액 불일치 예외 테스트
+### (예: 주문 금액은 20,000원인데 10,000원만 보낸 경우 -> 400 Bad Request)
+### ===================================================
+POST http://localhost:8080/api/v1/orders/1/payments/confirm
+Content-Type: application/json
+Cookie: JSESSIONID=[아까 받은 쿠키 파일에 있는 문자열]
+X-CSRF-TOKEN: [새로운 요청의 응답 HTML에 있던 csrf value 문자열]
+
+{
+  "paymentKey": "toss_payment_key_wrong_amount",
+  "amountKrw": 1111110
+}
+
+
+### ===================================================
+### ⚠️ [엣지케이스 2] 이미 결제완료(PAID)된 주문 재승인 시도
+### (2번 주문은 이미 PAID 상태 -> 중복 승인 차단 에러)
+### ===================================================
+POST http://localhost:8080/api/v1/orders/2/payments/confirm
+Content-Type: application/json
+Cookie: JSESSIONID=[아까 받은 쿠키 파일에 있는 문자열]
+X-CSRF-TOKEN: [새로운 요청의 응답 HTML에 있던 csrf value 문자열]
+
+{
+  "paymentKey": "duplicate_payment_key",
+  "amountKrw": 1111110
+}
+
+
+### ===================================================
+### ⚠️ [엣지케이스 3] 이미 취소된(CANCELLED) 주문 재취소 시도
+### (3번 주문은 이미 CANCELLED 상태 -> 중복 취소 차단 에러)
+### ===================================================
+POST http://localhost:8080/api/v1/orders/3/payments/cancel
+Content-Type: application/json
+Cookie: JSESSIONID=[아까 받은 쿠키 파일에 있는 문자열]
+X-CSRF-TOKEN: [새로운 요청의 응답 HTML에 있던 csrf value 문자열]
+
+{
+  "cancelAmountKrw": 1111110,
+  "cancelReason": "이미 취소된 걸 재취소 시도"
+}
+
+
+### ===================================================
+### ⚠️ [엣지케이스 4] 존재하지 않는 주문 ID 요청
+### (99999번 주문 조회 시 -> 404 Not Found 또는 Exception)
+### ===================================================
+POST http://localhost:8080/api/v1/orders/99999/payments/confirm
+Content-Type: application/json
+Cookie: JSESSIONID=[아까 받은 쿠키 파일에 있는 문자열]
+X-CSRF-TOKEN: [새로운 요청의 응답 HTML에 있던 csrf value 문자열]
+
+{
+  "paymentKey": "invalid_order_key",
+  "amountKrw": 1111110
+}
