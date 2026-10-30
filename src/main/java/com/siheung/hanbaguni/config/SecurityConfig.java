@@ -28,7 +28,10 @@ public class SecurityConfig {
                                 "/actuator/health",
                                 "/actuator/health/**"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/group-purchases").permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/group-purchases",
+                                "/group-purchases/{id}"
+                        ).permitAll()
                         .requestMatchers("/seller/**").hasRole("SELLER")
                         .anyRequest().authenticated()
                 )

@@ -22,7 +22,9 @@ import java.nio.charset.StandardCharsets;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {
@@ -61,11 +63,48 @@ class GroupPurchaseBrowseIntegrationTest {
                 LocalDateTime.now().minusDays(1), LocalDateTime.now().plusDays(1));
     }
 
-    @Test void anonymousMustLoginForBothRoutes() throws Exception {
-        mvc.perform(get("/group-purchases")).andExpect(status().is3xxRedirection())
+    @Test void anonymousCanRenderListAndDetailWithoutImage() throws Exception {
+        var gp = open("비회원 공개 상품");
+        mvc.perform(get("/group-purchases")).andExpect(status().isOk())
+                .andExpect(content().string(containsString("비회원 공개 상품")))
+                .andExpect(content().string(containsString("href=\"/login\"")))
+                .andExpect(content().string(not(containsString("action=\"/logout\""))));
+        mvc.perform(get("/group-purchases/" + gp.getId())).andExpect(status().isOk())
+                .andExpect(view().name("group-purchases/detail"))
+                .andExpect(content().string(containsString("비회원 공개 상품")))
+                .andExpect(content().string(containsString("3,000")))
+                .andExpect(content().string(containsString("상품 설명")))
+                .andExpect(content().string(not(containsString("<img "))))
+                .andExpect(content().string(containsString("등록된 상품 사진 없음")));
+    }
+
+    @Test void anonymousDetailRendersProductImageFromDatabase() throws Exception {
+        var gp = open("이미지 있는 상품");
+        var p = gp.getProduct();
+        p.update(p.getName(), p.getCategory(), p.getRegularPrice(), p.getUnit(),
+                p.getDescription(), "/uploads/products/test-onion.jpg", p.getStatus());
+        em.flush();
+        em.clear();
+        mvc.perform(get("/group-purchases/" + gp.getId())).andExpect(status().isOk())
+                .andExpect(content().string(containsString("src=\"/uploads/products/test-onion.jpg\"")))
+                .andExpect(content().string(containsString("alt=\"이미지 있는 상품\"")))
+                .andExpect(content().string(not(containsString("등록된 상품 사진 없음"))));
+    }
+
+    @Test void sellerRoutesStillRequireSellerRole() throws Exception {
+        mvc.perform(get("/seller/stores")).andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login"));
-        mvc.perform(get("/group-purchases/1")).andExpect(status().is3xxRedirection())
+        mvc.perform(get("/seller/stores").with(member())).andExpect(status().isForbidden());
+    }
+
+    @Test void publicReadDoesNotOpenWritesOrOrderRoutes() throws Exception {
+        for (String path : new String[]{"/group-purchases", "/group-purchases/1", "/group-purchases/1/orders"}) {
+            mvc.perform(post(path).with(csrf())).andExpect(status().is3xxRedirection())
+                    .andExpect(redirectedUrl("/login"));
+        }
+        mvc.perform(get("/group-purchases/1/orders")).andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/login"));
+        mvc.perform(post("/group-purchases/1/orders")).andExpect(status().isForbidden());
     }
 
     @Test void rendersActualListAndDetailWithoutExposingSellerAccount() throws Exception {
@@ -98,11 +137,15 @@ class GroupPurchaseBrowseIntegrationTest {
         var expired = purchase("지난모집", "마감마트", "시흥시", "채소", GroupPurchase.Status.OPEN, now.minusDays(2), now.minusDays(1));
         var hidden = open("숨김상품");
         hidden.getProduct().updateStatus(Product.Status.HIDDEN);
+        var soldOut = open("품절상품");
+        soldOut.getProduct().updateStatus(Product.Status.SOLD_OUT);
+        var closed = purchase("종료모집", "종료마트", "시흥시", "채소", GroupPurchase.Status.CLOSED,
+                now.minusDays(1), now.plusDays(1));
         em.flush();
-        mvc.perform(get("/group-purchases").with(member())).andExpect(status().isOk())
+        mvc.perform(get("/group-purchases")).andExpect(status().isOk())
                 .andExpect(content().string(containsString("조건에 맞는 공동구매가 없어요")));
-        for (var gp : new GroupPurchase[]{draft, future, expired, hidden}) {
-            mvc.perform(get("/group-purchases/" + gp.getId()).with(member())).andExpect(status().isNotFound());
+        for (var gp : new GroupPurchase[]{draft, future, expired, hidden, soldOut, closed}) {
+            mvc.perform(get("/group-purchases/" + gp.getId())).andExpect(status().isNotFound());
         }
         mvc.perform(get("/group-purchases/999999").with(member())).andExpect(status().isNotFound());
     }
@@ -112,8 +155,8 @@ class GroupPurchaseBrowseIntegrationTest {
         var s = gp.getStore();
         s.update(s.getName(), null, s.getPhone(), s.getAddress(), null, null, Store.Status.SUSPENDED);
         em.flush();
-        mvc.perform(get("/group-purchases/" + gp.getId()).with(member())).andExpect(status().isNotFound());
-        mvc.perform(get("/group-purchases").with(member())).andExpect(status().isOk())
+        mvc.perform(get("/group-purchases/" + gp.getId())).andExpect(status().isNotFound());
+        mvc.perform(get("/group-purchases")).andExpect(status().isOk())
                 .andExpect(content().string(not(containsString("휴점상품"))));
     }
 

@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 /** Customer-facing data only; never expose the seller's User entity to the template. */
 public record GroupPurchaseView(
         Long id, String title, String productName, String category, String unit,
-        String storeName, String address, int groupPrice,
+        String storeName, String address, String imageUrl, int groupPrice,
         int targetQuantity, int maxQuantity, int currentQuantity,
         LocalDateTime startAt, LocalDateTime endAt,
         LocalDateTime pickupStartAt, LocalDateTime pickupEndAt,
@@ -25,7 +25,7 @@ public record GroupPurchaseView(
         }
         return new GroupPurchaseView(gp.getId(), gp.getTitle(), product.getName(),
                 product.getCategory(), product.getUnit(), store.getName(), address,
-                gp.getGroupPrice(),
+                product.getImageUrl(), gp.getGroupPrice(),
                 gp.getTargetQuantity(), gp.getMaxQuantity(), gp.getCurrentQuantity(),
                 gp.getStartAt(), gp.getEndAt(), gp.getPickupStartAt(), gp.getPickupEndAt(),
                 gp.getPickupNotice(), description);
