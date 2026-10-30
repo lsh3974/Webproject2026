@@ -5,6 +5,7 @@ import com.siheung.hanbaguni.entity.GroupPurchase;
 import com.siheung.hanbaguni.entity.Product;
 import com.siheung.hanbaguni.entity.Store;
 import com.siheung.hanbaguni.repository.GroupPurchaseRepository;
+import com.siheung.hanbaguni.repository.OrderRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,14 +20,17 @@ public class GroupPurchaseService {
     private final GroupPurchaseRepository groupPurchaseRepository;
     private final StoreService storeService;
     private final ProductService productService;
+    private final OrderRepository orderRepository;
 
     public GroupPurchaseService(
             GroupPurchaseRepository groupPurchaseRepository,
             StoreService storeService,
-            ProductService productService) {
+            ProductService productService,
+            OrderRepository orderRepository) {
         this.groupPurchaseRepository = groupPurchaseRepository;
         this.storeService = storeService;
         this.productService = productService;
+        this.orderRepository = orderRepository;
     }
 
     public List<GroupPurchase> findByStoreId(Long storeId) {
@@ -115,8 +119,8 @@ public class GroupPurchaseService {
     @Transactional
     public void deleteGroupPurchase(Long storeId, Long id, Long sellerId) {
         GroupPurchase gp = getWithStoreAndOwnershipCheck(storeId, id, sellerId);
-        if (gp.getCurrentQuantity() > 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 참여자가 있는 공동구매는 삭제할 수 없습니다.");
+        if (gp.getCurrentQuantity() > 0 || orderRepository.existsByGroupPurchaseId(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 예약 또는 주문 내역이 있는 공동구매는 삭제할 수 없습니다.");
         }
         groupPurchaseRepository.delete(gp);
     }

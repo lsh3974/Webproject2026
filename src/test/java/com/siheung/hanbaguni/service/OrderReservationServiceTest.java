@@ -46,6 +46,10 @@ class OrderReservationServiceTest {
     }
 
     private GroupPurchase createOpenGroupPurchase(Long gpId, Long sellerId, int groupPrice, int maxQty, Integer limitPerUser) {
+        return createOpenGroupPurchase(gpId, sellerId, groupPrice, maxQty, limitPerUser, LocalDateTime.now().plusDays(2));
+    }
+
+    private GroupPurchase createOpenGroupPurchase(Long gpId, Long sellerId, int groupPrice, int maxQty, Integer limitPerUser, LocalDateTime endAt) {
         User seller = createCustomer(sellerId, "seller@test.com", "판매자");
         Store store = new Store(seller, "시흥마트", "123-45-67890", "031-123-4567", "시흥시 정왕동", "101호", "동네마트");
         ReflectionTestUtils.setField(store, "id", 10L);
@@ -63,7 +67,7 @@ class OrderReservationServiceTest {
                 maxQty,
                 limitPerUser,
                 now.minusDays(1),
-                now.plusDays(2),
+                endAt,
                 now.plusDays(3),
                 now.plusDays(4),
                 "카운터 수령",
@@ -105,6 +109,30 @@ class OrderReservationServiceTest {
         assertThat(result.getTotalPrice()).isEqualTo(36000);
         assertThat(result.getReservedUntil()).isAfter(LocalDateTime.now().plusMinutes(14));
         verify(orderRepository).save(any(Order.class));
+    }
+
+    @Test
+    @DisplayName("공동구매 마감 시간이 15분 미만으로 남은 경우 예약 유지 시각은 마감 시각(endAt)으로 제한")
+    void reserveOrder_capReservedUntilWithEndAt() {
+        Long buyerId = 2L;
+        Long gpId = 500L;
+        User buyer = createCustomer(buyerId, "buyer@test.com", "구매자1");
+        LocalDateTime closingSoon = LocalDateTime.now().plusMinutes(5);
+        GroupPurchase gp = createOpenGroupPurchase(gpId, 1L, 12000, 20, 5, closingSoon);
+
+        given(userRepository.findById(buyerId)).willReturn(Optional.of(buyer));
+        given(groupPurchaseRepository.findByIdWithLock(gpId)).willReturn(Optional.of(gp));
+        given(orderRepository.findByGroupPurchaseIdAndStatusAndReservedUntilLessThanEqual(
+                eq(gpId), eq(Order.Status.PENDING), any(LocalDateTime.class)))
+                .willReturn(List.of());
+        given(orderRepository.sumQuantityByGroupPurchaseIdAndStatus(gpId, Order.Status.PAID)).willReturn(0);
+        given(orderRepository.sumActivePendingQuantity(eq(gpId), any(LocalDateTime.class))).willReturn(0);
+        given(orderRepository.sumUserActiveQuantity(eq(gpId), eq(buyerId), any(LocalDateTime.class))).willReturn(0);
+        given(orderRepository.save(any(Order.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        Order result = orderReservationService.reserveOrder(buyerId, gpId, 1);
+
+        assertThat(result.getReservedUntil()).isEqualTo(closingSoon);
     }
 
     @Test
@@ -215,7 +243,7 @@ class OrderReservationServiceTest {
     }
 
     @Test
-    @DisplayName("예약 대기(PENDING) 상태의 본인 주문 취소 성공")
+    @DisplayName("예약 대기(PENDING) 상태의 본인 주문 취소 성공 (비관적 락 조회)")
     void cancelReservation_success() {
         Long ownerId = 2L;
         User owner = createCustomer(ownerId, "buyer@test.com", "구매자1");
@@ -224,12 +252,24 @@ class OrderReservationServiceTest {
         Order order = new Order(owner, gp, 2, 12000, 24000, LocalDateTime.now().plusMinutes(15));
         ReflectionTestUtils.setField(order, "id", 10L);
 
-        given(orderRepository.findWithDetailsById(10L)).willReturn(Optional.of(order));
+        given(orderRepository.findByIdWithLock(10L)).willReturn(Optional.of(order));
 
         Order cancelled = orderReservationService.cancelReservation(10L, ownerId, "수량 변경");
 
         assertThat(cancelled.getStatus()).isEqualTo(Order.Status.CANCELLED);
         assertThat(cancelled.getCancelReason()).isEqualTo("수량 변경");
+    }
+
+    @Test
+    @DisplayName("취소 사유가 255자를 초과할 경우 400 BAD_REQUEST 예외 발생")
+    void cancelReservation_cancelReasonTooLong_throwsBadRequest() {
+        Long ownerId = 2L;
+        String longReason = "a".repeat(256);
+
+        assertThatThrownBy(() -> orderReservationService.cancelReservation(10L, ownerId, longReason))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400 BAD_REQUEST")
+                .hasMessageContaining("취소 사유는 255자 이내여야 합니다.");
     }
 
     @Test
@@ -243,7 +283,7 @@ class OrderReservationServiceTest {
         ReflectionTestUtils.setField(order, "id", 10L);
         order.markPaid("pay_key_123");
 
-        given(orderRepository.findWithDetailsById(10L)).willReturn(Optional.of(order));
+        given(orderRepository.findByIdWithLock(10L)).willReturn(Optional.of(order));
 
         assertThatThrownBy(() -> orderReservationService.cancelReservation(10L, ownerId, "취소"))
                 .isInstanceOf(ResponseStatusException.class)

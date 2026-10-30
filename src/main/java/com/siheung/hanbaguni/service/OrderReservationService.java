@@ -129,7 +129,8 @@ public class OrderReservationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "주문 금액 계산 범위를 초과했습니다.");
         }
 
-        LocalDateTime reservedUntil = now.plusMinutes(RESERVATION_HOLD_MINUTES);
+        LocalDateTime calculatedUntil = now.plusMinutes(RESERVATION_HOLD_MINUTES);
+        LocalDateTime reservedUntil = calculatedUntil.isAfter(gp.getEndAt()) ? gp.getEndAt() : calculatedUntil;
 
         Order order = new Order(user, gp, quantity, unitPrice, totalPrice, reservedUntil);
         return orderRepository.save(order);
@@ -168,10 +169,15 @@ public class OrderReservationService {
 
     /**
      * 결제 대기(PENDING) 상태의 수량 예약 주문을 취소하고 선점된 수량을 즉시 반환합니다.
+     * 동시 취소 및 결제 충돌을 방지하기 위해 Order 행에 비관적 쓰기 락(PESSIMISTIC_WRITE)을 획득합니다.
      */
     @Transactional
     public Order cancelReservation(Long orderId, Long userId, String cancelReason) {
-        Order order = orderRepository.findWithDetailsById(orderId)
+        if (cancelReason != null && cancelReason.length() > 255) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "취소 사유는 255자 이내여야 합니다.");
+        }
+
+        Order order = orderRepository.findByIdWithLock(orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "주문 내역을 찾을 수 없습니다."));
 
         if (!order.isOwnedBy(userId)) {

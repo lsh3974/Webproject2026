@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ko" xmlns:th="http://www.thymeleaf.org"
       xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
@@ -71,7 +71,7 @@
                 </div>
                 <div class="text-end">
                     <span class="text-muted small">주문자</span>
-                    <div class="fw-semibold" th:text="${order.user.name}">홍길동</div>
+                    <div class="fw-semibold" th:text="${order.user.displayName}">홍길동</div>
                     <div class="small text-muted" th:text="${order.user.email}">user@example.com</div>
                 </div>
             </div>
@@ -212,3 +212,4 @@
         crossorigin="anonymous"></script>
 </body>
 </html>
+

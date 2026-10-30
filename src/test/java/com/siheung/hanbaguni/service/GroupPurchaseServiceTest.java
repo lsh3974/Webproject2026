@@ -6,6 +6,7 @@ import com.siheung.hanbaguni.entity.Product;
 import com.siheung.hanbaguni.entity.Store;
 import com.siheung.hanbaguni.entity.User;
 import com.siheung.hanbaguni.repository.GroupPurchaseRepository;
+import com.siheung.hanbaguni.repository.OrderRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +36,9 @@ class GroupPurchaseServiceTest {
 
     @Mock
     private ProductService productService;
+
+    @Mock
+    private OrderRepository orderRepository;
 
     @InjectMocks
     private GroupPurchaseService groupPurchaseService;
@@ -235,5 +239,71 @@ class GroupPurchaseServiceTest {
         assertThatThrownBy(() -> groupPurchaseService.getWithStoreAndOwnershipCheck(storeAId, 500L, sellerId))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("404 NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("주문 또는 예약 내역이 존재하는 공동구매 삭제 시 400 BAD_REQUEST 예외 발생")
+    void deleteGroupPurchase_withExistingOrders_throwsBadRequest() {
+        // given
+        Long sellerId = 1L;
+        Long storeId = 10L;
+        Long gpId = 500L;
+
+        User seller = new User("owner@test.com", "hash", "주인");
+        ReflectionTestUtils.setField(seller, "id", sellerId);
+
+        Store store = new Store(seller, "시흥마트", "123-45-67890", "031-123-4567", "시흥시", "101호", "소개");
+        ReflectionTestUtils.setField(store, "id", storeId);
+
+        Product product = new Product(store, "사과", "과일", 15000, "1박스", "설명", null);
+        LocalDateTime now = LocalDateTime.now();
+        GroupPurchase gp = new GroupPurchase(
+                store, product, "사과 공구", 12000, 10, 50, 3,
+                now, now.plusDays(3), now.plusDays(4), now.plusDays(5),
+                "안내", "설명", GroupPurchase.Status.OPEN
+        );
+        ReflectionTestUtils.setField(gp, "id", gpId);
+
+        given(groupPurchaseRepository.findById(gpId)).willReturn(Optional.of(gp));
+        given(orderRepository.existsByGroupPurchaseId(gpId)).willReturn(true);
+
+        // when & then
+        assertThatThrownBy(() -> groupPurchaseService.deleteGroupPurchase(storeId, gpId, sellerId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400 BAD_REQUEST")
+                .hasMessageContaining("이미 예약 또는 주문 내역이 있는 공동구매는 삭제할 수 없습니다.");
+    }
+
+    @Test
+    @DisplayName("주문/예약 내역이 없고 참여자 수 0인 공동구매 삭제 성공")
+    void deleteGroupPurchase_success() {
+        // given
+        Long sellerId = 1L;
+        Long storeId = 10L;
+        Long gpId = 500L;
+
+        User seller = new User("owner@test.com", "hash", "주인");
+        ReflectionTestUtils.setField(seller, "id", sellerId);
+
+        Store store = new Store(seller, "시흥마트", "123-45-67890", "031-123-4567", "시흥시", "101호", "소개");
+        ReflectionTestUtils.setField(store, "id", storeId);
+
+        Product product = new Product(store, "사과", "과일", 15000, "1박스", "설명", null);
+        LocalDateTime now = LocalDateTime.now();
+        GroupPurchase gp = new GroupPurchase(
+                store, product, "사과 공구", 12000, 10, 50, 3,
+                now, now.plusDays(3), now.plusDays(4), now.plusDays(5),
+                "안내", "설명", GroupPurchase.Status.DRAFT
+        );
+        ReflectionTestUtils.setField(gp, "id", gpId);
+
+        given(groupPurchaseRepository.findById(gpId)).willReturn(Optional.of(gp));
+        given(orderRepository.existsByGroupPurchaseId(gpId)).willReturn(false);
+
+        // when
+        groupPurchaseService.deleteGroupPurchase(storeId, gpId, sellerId);
+
+        // then
+        verify(groupPurchaseRepository).delete(gp);
     }
 }

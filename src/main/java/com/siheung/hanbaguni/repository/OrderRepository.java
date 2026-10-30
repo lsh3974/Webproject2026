@@ -1,8 +1,10 @@
 package com.siheung.hanbaguni.repository;
 
 import com.siheung.hanbaguni.entity.Order;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,6 +21,13 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @EntityGraph(attributePaths = {"user", "groupPurchase", "groupPurchase.store", "groupPurchase.product"})
     @Query("SELECT o FROM Order o WHERE o.id = :id")
     Optional<Order> findWithDetailsById(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"user", "groupPurchase", "groupPurchase.store", "groupPurchase.product"})
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findByIdWithLock(@Param("id") Long id);
+
+    boolean existsByGroupPurchaseId(Long groupPurchaseId);
 
     @Query("""
             SELECT o FROM Order o
