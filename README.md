@@ -31,9 +31,11 @@
 - 비로그인 사용자의 비공개 주소 접근 시 로그인 화면으로 이동
 - 판매자 매장 등록 및 정보 수정 (소유권 검증 포함)
 - 판매자 상품 등록, 목록 조회, 정보 수정 및 판매상태 관리 (이미지 업로드 및 삭제 지원)
-- 판매자 공동구매 모집 등록, 초안 저장(DRAFT), 정식 게시(OPEN), 수정 및 삭제 관리
+- 판매자 공동구매 모집 등록, 초안 저장(DRAFT), 정식 게시(OPEN), 수정 및 삭제 관리 (6번 기능)
+- 구매자 공동구매 목록 검색·필터·페이징 및 상세 조회 (7번 기능)
+- 공동구매 주문 수량 예약, 동시성 선점 제어, 타임아웃 만료 및 예약 취소 (8번 기능)
 
-역할별 접근 제한과 주문, 결제는 아직 구현되지 않았습니다.
+결제(9번) 기능은 다음 단계로 연동 예정입니다.
 
 ## 1. Java 설정
 
@@ -87,7 +89,7 @@ SELECT VERSION();
 각자의 DB 데이터는 GitHub를 통해 자동으로 공유되지 않습니다.
 현재 `spring.jpa.hibernate.ddl-auto=none`이므로 테이블은 자동 생성되지 않습니다.
 
-### 회원 테이블 SQL 적용 순서
+### 회원 및 프로젝트 테이블 SQL 적용 순서
 
 Workbench에서 프로젝트 DB에 연결한 뒤 다음 파일을 순서대로 실행합니다.
 
@@ -95,8 +97,9 @@ Workbench에서 프로젝트 DB에 연결한 뒤 다음 파일을 순서대로 �
 2. `database/002-add-unique-nickname.sql`: 닉네임 중복 금지 제약 추가
 3. `database/003-create-stores-and-products.sql`: 매장 및 상품 테이블 생성
 4. `database/004-create-group-purchases.sql`: 공동구매 모집 테이블 생성
+5. `database/005-create-orders.sql`: 주문·수량 예약 테이블 생성 (8번 기능용)
 
-회원가입 및 매장/상품/공동구매 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
+회원가입, 매장/상품/공동구매 및 주문 예약 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
 파일을 GitHub에서 받는 것만으로 DB에 반영되지는 않습니다.
 
 - 이미 적용한 파일은 다시 실행하지 않습니다. 특히 002는 반복 실행 시 오류가 발생합니다.
@@ -104,7 +107,6 @@ Workbench에서 프로젝트 DB에 연결한 뒤 다음 파일을 순서대로 �
 - 기존에 중복 닉네임이 있으면 002 적용이 실패합니다. 기존 데이터를 임의로 삭제하지 말고 팀과 정리 방법을 협의합니다.
 - 각자 적용한 SQL 번호를 기록합니다.
 - 이후 DB 구조 변경도 별도 번호의 SQL 파일로 공유합니다.
-- 이번 로그인 기능을 위해 추가로 적용할 SQL은 없습니다.
 
 ## 3. 실행 환경변수
 
@@ -135,6 +137,9 @@ IntelliJ에서 `HanbaguniApplication`을 실행합니다.
 | 회원가입 | http://localhost:8080/signup |
 | 로그인 | http://localhost:8080/login |
 | 상태 확인 | http://localhost:8080/actuator/health |
+| 공동구매 둘러보기 | http://localhost:8080/group-purchases |
+| 내 주문·수량 예약 내역 | http://localhost:8080/orders |
+| 새 수량 예약 신청 | http://localhost:8080/orders/new |
 | 내 매장 관리 (판매자) | http://localhost:8080/seller/stores |
 | 새 매장 등록 (판매자) | http://localhost:8080/seller/stores/new |
 
@@ -358,7 +363,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 | 공동구매 수정 처리 | POST | `/seller/stores/{storeId}/group-purchases/{id}/edit` | 공동구매 조건 및 상태(`DRAFT`/`OPEN`/`CLOSED`) 갱신 |
 | 초안 즉시 게시 | POST | `/seller/stores/{storeId}/group-purchases/{id}/publish` | 초안(`DRAFT`) 상태의 모집을 즉시 공개(`OPEN`)로 전환 |
 | 모집 상태 간편 변경 | POST | `/seller/stores/{storeId}/group-purchases/{id}/status` | 목록 화면에서 원클릭으로 상태(`DRAFT`/`OPEN`/`CLOSED`) 전환 |
-| 공동구매 삭제 | POST | `/seller/stores/{storeId}/group-purchases/{id}/delete` | 참여자가 없는(`current_quantity == 0`) 공동구매 삭제 처리 |
+| 공동구매 삭제 | POST | `/seller/stores/{storeId}/group-purchases/{id}/delete` | 참여자 및 주문 내역이 없는 공동구매 삭제 처리 |
 
 ### 주요 정책 및 검증 규칙
 
@@ -367,6 +372,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - **1인당 제한 수량 선택 설정**: `limit_per_user`는 선택 사항(기본값 제한 없음/`NULL`)으로, 사재기 방지가 필요한 특가 상품에 한해 설정할 수 있습니다.
 - **양방향 일수 계산 UI**: 모집 기간과 매장 수령 기간 설정 시 일수(예: 3일간)를 입력하면 마감 일시가 자동 계산되고, 반대로 마감 일시를 직접 지정하면 몇 일 동안 진행되는지 자동으로 역계산되어 표시됩니다.
 - **상품 관리 탭 연동**: 상품 목록 화면(`/seller/stores/{storeId}/products`)에서 각 상품의 공동구매 상태(`미등록`, `공동구매 모집 초안`, `공동구매 모집중`, `공동구매 마감`)가 동적 버튼으로 표시됩니다.
+- **외래키 제약조건 보호**: 예약 또는 주문 내역이 존재하는 공동구매는 삭제 시 외래키 위반 에러를 방지하기 위해 400 에러로 차단됩니다.
 
 ## 13. 구매자 공동구매 조회 (7번 기능)
 
@@ -374,59 +380,41 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 - `GET /group-purchases`: 목록, 제목·상품명·매장명 검색, 지역·카테고리 검색, 12개 단위 페이징.
 - `GET /group-purchases/{id}`: 상품 설명, 가격, 현재·목표·최대 수량, 마감과 수령 정보.
-- 초기 `siheung_ui_20261023_fixed.html`의 색상, 카드, 레이아웃을 적용했다. 배너 이미지는 해당 시안에서 추출했다.
-- `GroupPurchase`, `Product`, `Store`와 기존 `group_purchases` 테이블을 재사용한다. 새 DB SQL은 없다.
-- SecurityConfig와 로그인 정책은 변경하지 않는다. 현재 main 기준으로 목록·상세 모두 로그인해야 접근 가능하다.
-- 비로그인 공개 여부는 팀 결정 후 별도 반영한다. 사용자 세션 키를 새로 만들지 않는다.
+- 비회원도 공개 공동구매의 목록 및 상세 화면을 조회할 수 있습니다.
+- `OPEN` 상태이며 현재 시각이 모집 기간(`start_at <= now < end_at`) 안이고 매장(`ACTIVE`), 상품(`ON_SALE`)인 경우만 공개됩니다.
 
-### 이번 구현의 조회 조건 (팀 검토 대상)
+## 14. 공동구매 주문 수량 예약 및 선점 관리 (8번 기능)
 
-- `OPEN`이며 `start_at <= 서버 현재 시각 < end_at`인 모집만 표시한다.
-- 매장이 `ACTIVE`, 상품이 `ON_SALE`이어야 한다.
-- 상세에도 같은 조건을 적용한다. 초안, 시작 전, 마감, 숨김·판매 중지 상품, 비활성 매장 및 없는 ID는 404이다.
-- 완료·마감 모집 이력 조회는 이번 범위에 포함하지 않는다. 이후 내 주문에서 참조할 이력 조회는 별도 정책을 정한다.
-- 정렬은 ID 내림차순이며, 제목·상품명·매장명은 통합 부분 검색한다. 지역은 매장 주소, 카테고리는 기존 문자열 필드의 부분 검색이다.
-- 현재 Store에는 구조화된 행정동 컬럼이 없다. 따라서 별도 지역 목록이나 DB 컬럼을 임의로 추가하지 않았다.
-- 현재 기존 코드와 동일한 `LocalDateTime.now()` 기준이다. UTC 저장 정책 및 기존 데이터의 시간대는 통합 전에 확인해야 한다.
+### 지원 기능 및 엔드포인트
 
-### 수량 관련 미확정 사항
+| 기능 | HTTP 메서드 | 요청 주소 | 설명 |
+|---|---|---|---|
+| 내 주문·예약 목록 | GET | `/orders` | 로그인한 구매자의 전체 주문/예약 이력 및 상태 확인 |
+| 예약 대상 공구 선택 | GET | `/orders/new` | 현재 모집 중인 공동구매 목록 중 수량을 예약할 공구 선택 |
+| 수량 예약 신청 화면 | GET | `/orders/new?groupPurchaseId={id}` | 단가, 잔여 수량, 1인당 구매 제한을 확인하고 수량을 선택하는 폼 |
+| 수량 예약 신청 처리 | POST | `/orders/new` | 비관적 락으로 수량을 안전하게 선점하고 15분 결제 대기(`PENDING`) 주문 생성 |
+| 주문·예약 상세 화면 | GET | `/orders/{orderId}` | 주문 상세 정보, 수령 안내, 결제 만료 카운트다운 타이머 제공 |
+| 수량 예약 취소 처리 | POST | `/orders/{orderId}/cancel` | `PENDING` 상태의 예약 취소 및 선점 수량 즉시 반환 |
+| REST: 수량 예약 생성 | POST | `/api/v1/orders` | REST API 기반 수량 예약 주문 생성 (JSON 응답) |
+| REST: 내 주문 목록 | GET | `/api/v1/orders` | 로그인한 사용자의 주문 목록 조회 |
+| REST: 단일 주문 상세 | GET | `/api/v1/orders/{orderId}` | 단일 주문 상세 JSON 조회 |
+| REST: 수량 예약 취소 | POST | `/api/v1/orders/{orderId}/cancel-reservation` | REST API 기반 예약 취소 (선점 수량 반환) |
 
-첨부 설계는 `campaigns`의 예약·결제 수량을 분리하지만 현재 main은 `group_purchases.current_quantity`를 사용한다.
-또한 기존 설계는 목표 수량이 판매 상한이지만, main은 `target_quantity`와 `max_quantity`를 구분한다.
+### 주요 정책 및 무결성 보장
 
-- 이번 화면은 DB의 `current_quantity`를 **현재 수량**으로만 표시한다.
-- 진행률은 현재/목표 수량이며 화면 막대는 0~100%로 제한한다. 현재 수량 원본은 별도로 표시한다.
-- 잔여 주문 가능 수량, 수량 예약·차감, 주문 생성 및 결제 처리는 하지 않는다.
-- 8번·9번 담당은 예약 수량 저장 위치, `current_quantity`의 의미, 판매 상한 및 성공 시점을 먼저 확정한다.
-- 주문 버튼 대신 현재 조회만 가능한 상태를 명시한다.
-
-### 로컬 확인
-
-1. 5·6번이 병합된 최신 main을 본인 작업 브랜치에 반영한다.
-2. 이미 적용하지 않은 경우에만 DB SQL `003-create-stores-and-products.sql`, `004-create-group-purchases.sql`을 순서대로 적용한다.
-3. 별도의 판매자 테스트 계정을 로컬 DB에서 SELLER로 설정하고 재로그인한다.
-4. `/seller/stores`에서 ACTIVE 매장을 만들고, ON_SALE 상품과 현재 진행 중인 OPEN 모집을 만든다.
-5. 검색·필터, 카드의 상세 링크, 빈 결과, 비공개 모집의 상세 404를 확인한다.
-6. 로그아웃 후 두 조회 주소 모두 로그인 페이지로 이동하는지 확인한다.
-
-### 적용 파일
-
-- `GroupPurchaseBrowseController`: 기존 기본 화면용 파일이 있으면 내용을 교체한다. 같은 경로의 컨트롤러를 중복 생성하지 않는다.
-- `GroupPurchaseQueryService`: 조회 조건·필터·페이징.
-- `GroupPurchaseView`: 고객 화면용 데이터. 회원 비밀번호 등 User 엔티티는 전달하지 않는다.
-- 기존 `GroupPurchaseRepository`: Specification 조회와 store/product EntityGraph만 추가한다. 판매자용 기존 메서드는 유지한다.
-- `templates/group-purchases/`: 목록·상세·공통 헤더/푸터.
-- `static/css/group-purchases.css`, `static/images/catalog-hero.webp`: 화면 리소스.
-- `index.html`: 홈에 목록 진입 링크 추가.
-
-### 수정 사항
-
-- 비회원도 GET `/group-purchases`, `/group-purchases/{id}`를 조회할 수 있습니다.
-- 목록과 상세는 모두 OPEN이고 모집 기간 안에 있으며, 매장이 ACTIVE이고 상품이 ON_SALE인 경우만 공개합니다. 그 외 상세는 404입니다.
-- 기존 `/seller/**` SELLER 제한, 나머지 주소의 인증 제한, CSRF, 역할별 로그인 성공 처리를 유지합니다.
-- `GroupPurchaseView.imageUrl`은 상품의 `imageUrl`을 전달합니다. 이미지가 없는 상세도 정상 렌더링합니다.
-- 새 DB 컬럼이나 SQL 변경은 없습니다. H2는 test 범위로만 사용하고 실행 DB는 기존 MySQL입니다.
-- 조회 통합 테스트와 기존 서비스 테스트 실행: `.\mvnw.cmd "-Dtest=GroupPurchaseBrowseIntegrationTest,*ServiceTest" test`
-- 통합 테스트는 별도 H2 메모리 DB를 사용하며 비회원 목록·상세 실제 HTML, 이미지 유무, 공개 대상 필터, 판매자 접근 제한을 확인합니다. 로컬 MySQL 검증은 별도로 진행합니다.
-
-
+- **비관적 쓰기 락(PESSIMISTIC_WRITE) 기반 동시성 제어**:
+  - 다수의 사용자가 동시에 마지막 남은 재고를 주문하더라도 `GroupPurchase` 행 락을 획득하여 **초과 예약(Overselling)을 원천 차단**합니다.
+  - 예약 취소 시에도 `Order` 행 락을 획득하여 취소 처리와 결제 완료 처리의 동시 충돌을 방지합니다.
+- **실시간 재고 선점 및 타임아웃 만료(15분 Hold)**:
+  - 주문 생성 시 기본 15분(`RESERVATION_HOLD_MINUTES`) 동안 수량을 선점하며 상태는 `PENDING`이 됩니다.
+  - 공동구매 마감 시각(`endAt`)이 15분 미만으로 남은 경우 선점 기한(`reservedUntil`)을 마감 시각으로 제한합니다.
+  - 선점 기한이 지난 주문은 신규 예약 및 조회 시점에 자동으로 `EXPIRED`로 전환되어 다른 사용자를 위한 잔여 수량으로 즉시 환원됩니다.
+- **1인당 구매 제한(`limit_per_user`) 검증 및 사용자 알림**:
+  - 사용자의 확정 수량 + 유효 예약 수량 합계가 `limit_per_user`를 초과할 수 없도록 서버에서 철저히 검증합니다.
+  - 화면에서도 초과 수량을 선택하거나 제출 시 브라우저 경고 알림(`alert`)을 띄우고 폼 전송을 차단합니다.
+- **소유권 및 자전거래 검증**:
+  - 본인의 주문만 조회 및 취소할 수 있으며, 타인 주문 접근 시 `403 FORBIDDEN`을 반환합니다.
+  - 판매자가 본인이 운영하는 매장의 공동구매에 예약하려 할 경우 `400 BAD_REQUEST`로 차단합니다.
+- **가독성 최적화**:
+  - 상품 단위(`unit`)가 `"30개"`, `"10개"` 등 숫자가 포함된 경우 화면에 숫자가 겹쳐 보이던 문제를 개선하여, 상단 상품명에만 단위를 명시하고 수량 영역은 순수 숫자만 깔끔하게 출력합니다.
+- **DB 스키마 추가**: `database/005-create-orders.sql` (주문 테이블 생성)
