@@ -6,6 +6,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.HttpMethod;
 import com.siheung.hanbaguni.security.RoleBasedLoginSuccessHandler;
 
 @Configuration
@@ -26,6 +27,10 @@ public class SecurityConfig {
                                 "/uploads/**",
                                 "/actuator/health",
                                 "/actuator/health/**"
+                        ).permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/group-purchases",
+                                "/group-purchases/{id}"
                         ).permitAll()
                         .requestMatchers("/seller/**").hasRole("SELLER")
                         .anyRequest().authenticated()
