@@ -411,9 +411,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - **양방향 일수 계산 UI**: 모집 기간과 매장 수령 기간 설정 시 일수(예: 3일간)를 입력하면 마감 일시가 자동 계산되고, 반대로 마감 일시를 직접 지정하면 몇 일 동안 진행되는지 자동으로 역계산되어 표시됩니다.
 - **상품 관리 탭 연동**: 상품 목록 화면(`/seller/stores/{storeId}/products`)에서 각 상품의 공동구매 상태(`미등록`, `공동구매 모집 초안`, `공동구매 모집중`, `공동구매 마감`)가 동적 버튼으로 표시됩니다.
 
-# 7번 구매자 공동구매 조회
+## 13. 구매자 공동구매 조회 (7번 기능)
 
-## 범위
+### 범위
 
 - `GET /group-purchases`: 목록, 제목·상품명·매장명 검색, 지역·카테고리 검색, 12개 단위 페이징.
 - `GET /group-purchases/{id}`: 상품 설명, 가격, 현재·목표·최대 수량, 마감과 수령 정보.
@@ -422,7 +422,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - SecurityConfig와 로그인 정책은 변경하지 않는다. 현재 main 기준으로 목록·상세 모두 로그인해야 접근 가능하다.
 - 비로그인 공개 여부는 팀 결정 후 별도 반영한다. 사용자 세션 키를 새로 만들지 않는다.
 
-## 이번 구현의 조회 조건 (팀 검토 대상)
+### 이번 구현의 조회 조건 (팀 검토 대상)
 
 - `OPEN`이며 `start_at <= 서버 현재 시각 < end_at`인 모집만 표시한다.
 - 매장이 `ACTIVE`, 상품이 `ON_SALE`이어야 한다.
@@ -432,7 +432,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 현재 Store에는 구조화된 행정동 컬럼이 없다. 따라서 별도 지역 목록이나 DB 컬럼을 임의로 추가하지 않았다.
 - 현재 기존 코드와 동일한 `LocalDateTime.now()` 기준이다. UTC 저장 정책 및 기존 데이터의 시간대는 통합 전에 확인해야 한다.
 
-## 수량 관련 미확정 사항
+### 수량 관련 미확정 사항
 
 첨부 설계는 `campaigns`의 예약·결제 수량을 분리하지만 현재 main은 `group_purchases.current_quantity`를 사용한다.
 또한 기존 설계는 목표 수량이 판매 상한이지만, main은 `target_quantity`와 `max_quantity`를 구분한다.
@@ -443,7 +443,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 8번·9번 담당은 예약 수량 저장 위치, `current_quantity`의 의미, 판매 상한 및 성공 시점을 먼저 확정한다.
 - 주문 버튼 대신 현재 조회만 가능한 상태를 명시한다.
 
-## 로컬 확인
+### 로컬 확인
 
 1. 5·6번이 병합된 최신 main을 본인 작업 브랜치에 반영한다.
 2. 이미 적용하지 않은 경우에만 DB SQL `003-create-stores-and-products.sql`, `004-create-group-purchases.sql`을 순서대로 적용한다.
@@ -452,7 +452,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 5. 검색·필터, 카드의 상세 링크, 빈 결과, 비공개 모집의 상세 404를 확인한다.
 6. 로그아웃 후 두 조회 주소 모두 로그인 페이지로 이동하는지 확인한다.
 
-## 적용 파일
+### 적용 파일
 
 - `GroupPurchaseBrowseController`: 기존 기본 화면용 파일이 있으면 내용을 교체한다. 같은 경로의 컨트롤러를 중복 생성하지 않는다.
 - `GroupPurchaseQueryService`: 조회 조건·필터·페이징.
@@ -462,7 +462,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - `static/css/group-purchases.css`, `static/images/catalog-hero.webp`: 화면 리소스.
 - `index.html`: 홈에 목록 진입 링크 추가.
 
-## 수정 사항
+### 수정 사항
 
 - 비회원도 GET `/group-purchases`, `/group-purchases/{id}`를 조회할 수 있습니다.
 - 목록과 상세는 모두 OPEN이고 모집 기간 안에 있으며, 매장이 ACTIVE이고 상품이 ON_SALE인 경우만 공개합니다. 그 외 상세는 404입니다.
