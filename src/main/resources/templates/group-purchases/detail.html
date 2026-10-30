@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${purchase.title + ' · 시흥한바구니'}">공동구매 상세</title>
+    <link rel="stylesheet" th:href="@{/css/group-purchases.css}">
+</head>
+<body>
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+<div th:replace="~{group-purchases/fragments :: header}"></div>
+<main id="main" class="container page">
+    <nav class="breadcrumb" aria-label="현재 위치"><a th:href="@{/group-purchases}">공동구매 둘러보기</a><span aria-hidden="true">/</span><span>상품 상세</span></nav>
+    <div class="detail-layout">
+        <div>
+            <div class="detail-image">
+                <img th:if="${purchase.imageUrl != null}" th:src="@{${purchase.imageUrl}}" th:alt="${purchase.productName}">
+                <span class="image-placeholder" th:unless="${purchase.imageUrl != null}" aria-label="등록된 상품 사진 없음"><span aria-hidden="true">♧</span><small>우리 동네 공동구매</small></span>
+            </div>
+            <section class="description-panel"><p class="eyebrow">ABOUT THIS PRODUCT</p><h2>상품 이야기</h2><p class="multiline" th:text="${purchase.description != null and !#strings.isEmpty(purchase.description) ? purchase.description : '아직 등록된 상세 설명이 없습니다.'}">상품 설명</p></section>
+        </div>
+        <section class="detail-info" aria-labelledby="detail-title">
+            <span class="inline-badge">모집 중</span>
+            <p class="store-name" th:text="${purchase.storeName}">매장명</p>
+            <h1 id="detail-title" th:text="${purchase.title}">공동구매 제목</h1>
+            <p class="lead"><span th:text="${purchase.productName}">상품명</span> · <span th:text="${purchase.category}">분류</span></p>
+            <p class="price detail-price"><strong th:text="${#numbers.formatInteger(purchase.groupPrice, 1, 'COMMA')}">0</strong><b>원</b><small th:text="${'/ ' + purchase.unit}">/ 개</small></p>
+            <div class="detail-progress"><div class="progress-label"><span>목표 수량 대비 현황</span><strong th:text="|${purchase.progressPercent}%|">0%</strong></div><div class="progress" aria-hidden="true"><span th:style="|width:${purchase.progressPercent}%|"></span></div></div>
+            <dl class="facts-grid">
+                <div><dt>현재 수량</dt><dd th:text="${purchase.currentQuantity + ' ' + purchase.unit}">0 개</dd></div>
+                <div><dt>목표 수량</dt><dd th:text="${purchase.targetQuantity + ' ' + purchase.unit}">0 개</dd></div>
+                <div><dt>최대 모집 수량</dt><dd th:text="${purchase.maxQuantity + ' ' + purchase.unit}">0 개</dd></div>
+                <div><dt>모집 마감</dt><dd th:text="${#temporals.format(purchase.endAt, 'MM.dd HH:mm')}">모집 마감</dd></div>
+            </dl>
+            <section class="pickup-panel"><h2>매장 수령 안내</h2><p><strong th:text="${purchase.storeName}">매장명</strong><br><span th:text="${purchase.address}">수령 주소</span></p><p class="pickup-dates"><span th:text="${#temporals.format(purchase.pickupStartAt, 'yyyy.MM.dd HH:mm')}"></span><br>~ <span th:text="${#temporals.format(purchase.pickupEndAt, 'yyyy.MM.dd HH:mm')}"></span></p><p class="multiline" th:if="${purchase.pickupNotice != null and !#strings.isEmpty(purchase.pickupNotice)}" th:text="${purchase.pickupNotice}">수령 안내</p></section>
+            <p class="order-notice">현재는 모집 정보 조회만 제공하며, 주문 신청은 아직 지원하지 않습니다.</p>
+            <a class="btn btn-primary btn-wide" th:href="@{/group-purchases}">다른 공동구매 둘러보기 <span aria-hidden="true">→</span></a>
+        </section>
+    </div>
+</main>
+<div th:replace="~{group-purchases/fragments :: footer}"></div>
+</body>
+</html>
