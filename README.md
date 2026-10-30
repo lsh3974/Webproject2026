@@ -461,7 +461,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - `templates/group-purchases/`: 목록·상세·공통 헤더/푸터.
 - `static/css/group-purchases.css`, `static/images/catalog-hero.webp`: 화면 리소스.
 - `index.html`: 홈에 목록 진입 링크 추가.
-ㅎ
+
 ## 수정 사항
 
 - 비회원도 GET `/group-purchases`, `/group-purchases/{id}`를 조회할 수 있습니다.
