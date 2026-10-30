@@ -70,7 +70,7 @@ public record GroupPurchaseReservationSummary(
             if (remaining <= 0) {
                 reason = "현재 모집 가능한 모든 수량이 선점되어 예약이 마감되었습니다.";
             } else if (gp.getLimitPerUser() != null && userActiveQuantity >= gp.getLimitPerUser()) {
-                reason = "1인당 구매 제한 수량(" + gp.getLimitPerUser() + product.getUnit() + ")을 이미 모두 예약하셨습니다.";
+                reason = "1인당 구매 제한 수량(" + gp.getLimitPerUser() + ")을 이미 모두 예약하셨습니다.";
             }
         }
 
@@ -104,12 +104,5 @@ public record GroupPurchaseReservationSummary(
                 canOrder,
                 reason
         );
-    }
-
-    public int progressPercent() {
-        if (targetQuantity == null || targetQuantity <= 0) {
-            return 0;
-        }
-        return (int) Math.max(0, Math.min(100, (long) occupiedQuantity * 100 / targetQuantity));
     }
 }

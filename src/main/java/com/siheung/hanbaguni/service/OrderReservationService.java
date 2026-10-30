@@ -99,7 +99,7 @@ public class OrderReservationService {
         if (quantity > remainingQty) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT,
-                    String.format("남은 예약 가능 수량(%d%s)을 초과하여 주문할 수 없습니다.", remainingQty, gp.getProduct().getUnit())
+                    String.format("남은 예약 가능 수량(%d)을 초과하여 주문할 수 없습니다.", remainingQty)
             );
         }
 
@@ -111,10 +111,10 @@ public class OrderReservationService {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         String.format(
-                                "1인당 최대 구매 제한 수량(%d%s)을 초과할 수 없습니다. (현재 내 유효 주문: %d%s, 추가 가능: %d%s)",
-                                gp.getLimitPerUser(), gp.getProduct().getUnit(),
-                                userActiveQty, gp.getProduct().getUnit(),
-                                leftForUser, gp.getProduct().getUnit()
+                                "1인당 최대 구매 제한 수량(%d)을 초과할 수 없습니다. (현재 내 유효 주문: %d, 추가 가능: %d)",
+                                gp.getLimitPerUser(),
+                                userActiveQty,
+                                leftForUser
                         )
                 );
             }

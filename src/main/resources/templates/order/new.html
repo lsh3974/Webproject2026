@@ -163,7 +163,6 @@
                                        th:field="*{quantity}"
                                        class="form-control text-center fw-bold fs-5"
                                        min="1"
-                                       th:attr="max=${summary.userOrderableMaxQuantity > 0 ? summary.userOrderableMaxQuantity : 1}"
                                        th:disabled="${!summary.orderable}"
                                        required>
                                 <button type="button" class="btn btn-outline-secondary" id="plusBtn"
@@ -218,11 +217,14 @@
     (function () {
         const unitPrice = /*[[${summary.groupPrice}]]*/ 0;
         const maxQty = /*[[${summary.userOrderableMaxQuantity}]]*/ 1;
+        const limitPerUser = /*[[${summary.limitPerUser}]]*/ null;
+        const userActiveQuantity = /*[[${summary.userActiveQuantity}]]*/ 0;
         const qtyInput = document.getElementById('quantityInput');
         const minusBtn = document.getElementById('minusBtn');
         const plusBtn = document.getElementById('plusBtn');
         const formulaEl = document.getElementById('priceFormulaText');
         const totalEl = document.getElementById('totalPriceText');
+        const form = document.getElementById('reservationForm');
 
         if (!qtyInput) return;
 
@@ -230,9 +232,6 @@
             let val = parseInt(qtyInput.value, 10);
             if (isNaN(val) || val < 1) {
                 val = 1;
-            }
-            if (maxQty > 0 && val > maxQty) {
-                val = maxQty;
             }
             const total = unitPrice * val;
             formulaEl.textContent = unitPrice.toLocaleString('ko-KR') + '원 × ' + val;
@@ -252,10 +251,16 @@
         if (plusBtn) {
             plusBtn.addEventListener('click', function () {
                 const current = parseInt(qtyInput.value, 10) || 1;
-                if (maxQty <= 0 || current < maxQty) {
-                    qtyInput.value = current + 1;
-                    updatePrice();
+                if (maxQty > 0 && current >= maxQty) {
+                    if (limitPerUser !== null && (current + userActiveQuantity >= limitPerUser)) {
+                        alert('1인당 최대 구매 제한(' + limitPerUser + ')을 초과할 수 없습니다.\n(현재 추가 예약 가능: ' + maxQty + ')');
+                    } else {
+                        alert('현재 남은 잔여 예약 가능 수량(' + maxQty + ')을 초과할 수 없습니다.');
+                    }
+                    return;
                 }
+                qtyInput.value = current + 1;
+                updatePrice();
             });
         }
 
@@ -264,8 +269,32 @@
         });
 
         qtyInput.addEventListener('change', function () {
+            let val = parseInt(qtyInput.value, 10);
+            if (!isNaN(val) && maxQty > 0 && val > maxQty) {
+                if (limitPerUser !== null && (val + userActiveQuantity > limitPerUser)) {
+                    alert('1인당 최대 구매 제한(' + limitPerUser + ')을 초과할 수 없습니다.\n(현재 추가 예약 가능: ' + maxQty + ')');
+                } else {
+                    alert('현재 남은 잔여 예약 가능 수량(' + maxQty + ')을 초과할 수 없습니다.');
+                }
+                qtyInput.value = maxQty;
+            }
             updatePrice();
         });
+
+        if (form) {
+            form.addEventListener('submit', function (e) {
+                const val = parseInt(qtyInput.value, 10) || 1;
+                if (maxQty > 0 && val > maxQty) {
+                    e.preventDefault();
+                    if (limitPerUser !== null && (val + userActiveQuantity > limitPerUser)) {
+                        alert('1인당 최대 구매 제한(' + limitPerUser + ')을 초과하여 주문할 수 없습니다.\n(현재 추가 예약 가능 수량: ' + maxQty + ')');
+                    } else {
+                        alert('남은 잔여 수량(' + maxQty + ')을 초과하여 주문할 수 없습니다.');
+                    }
+                    qtyInput.focus();
+                }
+            });
+        }
 
         updatePrice();
     })();
