@@ -10,33 +10,33 @@
 <a class="skip-link" href="#main">본문으로 건너뛰기</a>
 <div th:replace="~{group-purchases/fragments :: header}"></div>
 <main id="main" class="container page">
-    <nav class="breadcrumb" aria-label="현재 위치"><a th:href="@{/group-purchases}">공동구매 둘러보기</a><span aria-hidden="true">/</span><span>상품 상세</span></nav>
-    <div class="detail-layout">
-        <div>
-            <div class="detail-image">
-                <img th:if="${purchase.imageUrl != null}" th:src="@{${purchase.imageUrl}}" th:alt="${purchase.productName}">
-                <span class="image-placeholder" th:unless="${purchase.imageUrl != null}" aria-label="등록된 상품 사진 없음"><span aria-hidden="true">♧</span><small>우리 동네 공동구매</small></span>
-            </div>
-            <section class="description-panel"><p class="eyebrow">ABOUT THIS PRODUCT</p><h2>상품 이야기</h2><p class="multiline" th:text="${purchase.description != null and !#strings.isEmpty(purchase.description) ? purchase.description : '아직 등록된 상세 설명이 없습니다.'}">상품 설명</p></section>
-        </div>
-        <section class="detail-info" aria-labelledby="detail-title">
-            <span class="inline-badge">모집 중</span>
-            <p class="store-name" th:text="${purchase.storeName}">매장명</p>
-            <h1 id="detail-title" th:text="${purchase.title}">공동구매 제목</h1>
-            <p class="lead"><span th:text="${purchase.productName}">상품명</span> · <span th:text="${purchase.category}">분류</span></p>
-            <p class="price detail-price"><strong th:text="${#numbers.formatInteger(purchase.groupPrice, 1, 'COMMA')}">0</strong><b>원</b><small th:text="${'/ ' + purchase.unit}">/ 개</small></p>
-            <div class="detail-progress"><div class="progress-label"><span>목표 수량 대비 현황</span><strong th:text="|${purchase.progressPercent}%|">0%</strong></div><div class="progress" aria-hidden="true"><span th:style="|width:${purchase.progressPercent}%|"></span></div></div>
-            <dl class="facts-grid">
-                <div><dt>현재 수량</dt><dd th:text="${purchase.currentQuantity + ' ' + purchase.unit}">0 개</dd></div>
-                <div><dt>목표 수량</dt><dd th:text="${purchase.targetQuantity + ' ' + purchase.unit}">0 개</dd></div>
-                <div><dt>최대 모집 수량</dt><dd th:text="${purchase.maxQuantity + ' ' + purchase.unit}">0 개</dd></div>
-                <div><dt>모집 마감</dt><dd th:text="${#temporals.format(purchase.endAt, 'MM.dd HH:mm')}">모집 마감</dd></div>
-            </dl>
-            <section class="pickup-panel"><h2>매장 수령 안내</h2><p><strong th:text="${purchase.storeName}">매장명</strong><br><span th:text="${purchase.address}">수령 주소</span></p><p class="pickup-dates"><span th:text="${#temporals.format(purchase.pickupStartAt, 'yyyy.MM.dd HH:mm')}"></span><br>~ <span th:text="${#temporals.format(purchase.pickupEndAt, 'yyyy.MM.dd HH:mm')}"></span></p><p class="multiline" th:if="${purchase.pickupNotice != null and !#strings.isEmpty(purchase.pickupNotice)}" th:text="${purchase.pickupNotice}">수령 안내</p></section>
-            <p class="order-notice">현재는 모집 정보 조회만 제공하며, 주문 신청은 아직 지원하지 않습니다.</p>
-            <a class="btn btn-primary btn-wide" th:href="@{/group-purchases}">다른 공동구매 둘러보기 <span aria-hidden="true">→</span></a>
-        </section>
+    <p><a th:href="@{/group-purchases}">← 공동구매 목록</a></p>
+    <h1 th:text="${purchase.title}">공동구매 상세</h1>
+    <p>상태: 모집 중</p>
+    <div class="detail-image">
+        <img th:if="${purchase.imageUrl != null and !#strings.isEmpty(purchase.imageUrl)}"
+             th:src="@{${purchase.imageUrl}}" th:alt="${purchase.productName}"
+             style="display:block;max-width:100%;width:240px;height:auto;margin-bottom:16px;">
+        <p class="image-placeholder" th:unless="${purchase.imageUrl != null and !#strings.isEmpty(purchase.imageUrl)}">등록된 상품 사진 없음</p>
     </div>
+    <dl class="details">
+        <dt>상품명</dt><dd th:text="${purchase.productName}">상품명</dd>
+        <dt>카테고리</dt><dd th:text="${purchase.category}">분류</dd>
+        <dt>매장</dt><dd th:text="${purchase.storeName}">매장명</dd>
+        <dt>가격</dt><dd><span th:text="${#numbers.formatInteger(purchase.groupPrice, 1, 'COMMA')}">0</span>원 / <span th:text="${purchase.unit}">개</span></dd>
+        <dt>현재 수량</dt><dd th:text="${purchase.currentQuantity + ' ' + purchase.unit}">0 개</dd>
+        <dt>목표 수량</dt><dd th:text="${purchase.targetQuantity + ' ' + purchase.unit}">0 개</dd>
+        <dt>최대 모집 수량</dt><dd th:text="${purchase.maxQuantity + ' ' + purchase.unit}">0 개</dd>
+        <dt>목표 달성률</dt><dd th:text="|${purchase.progressPercent}%|">0%</dd>
+        <dt>모집 기간</dt><dd><span th:text="${#temporals.format(purchase.startAt, 'yyyy.MM.dd HH:mm')}"></span> ~ <span th:text="${#temporals.format(purchase.endAt, 'yyyy.MM.dd HH:mm')}"></span></dd>
+        <dt>수령 주소</dt><dd th:text="${purchase.address}">주소</dd>
+        <dt>수령 기간</dt><dd><span th:text="${#temporals.format(purchase.pickupStartAt, 'yyyy.MM.dd HH:mm')}"></span> ~ <span th:text="${#temporals.format(purchase.pickupEndAt, 'yyyy.MM.dd HH:mm')}"></span></dd>
+        <dt>수령 안내</dt><dd class="multiline" th:text="${purchase.pickupNotice != null and !#strings.isEmpty(purchase.pickupNotice) ? purchase.pickupNotice : '등록된 안내가 없습니다.'}">안내</dd>
+    </dl>
+    <h2>상품 설명</h2>
+    <p class="multiline" th:text="${purchase.description != null and !#strings.isEmpty(purchase.description) ? purchase.description : '아직 등록된 상세 설명이 없습니다.'}">설명</p>
+    <p class="notice">현재는 모집 정보 조회만 제공하며, 주문 신청은 아직 지원하지 않습니다.</p>
+    <a th:href="@{/group-purchases}">목록으로 돌아가기</a>
 </main>
 <div th:replace="~{group-purchases/fragments :: footer}"></div>
 </body>
