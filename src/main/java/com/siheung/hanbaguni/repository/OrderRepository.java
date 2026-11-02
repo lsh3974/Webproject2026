@@ -94,4 +94,34 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("userId") Long userId,
             @Param("now") LocalDateTime now
     );
+
+    @Query("""
+            SELECT SUM(o.quantity)
+            FROM Order o
+            WHERE o.groupPurchase.id = :groupPurchaseId
+              AND (
+                    o.status = com.siheung.hanbaguni.entity.Order.Status.PAID
+                    OR (
+                        o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
+                        AND (o.reservedUntil IS NULL OR o.reservedUntil > :now)
+                    )
+              )
+            GROUP BY o.user.id
+            """)
+    List<Long> findActiveUserQuantities(
+            @Param("groupPurchaseId") Long groupPurchaseId,
+            @Param("now") LocalDateTime now
+    );
+
+    @Query("""
+            SELECT MAX(o.reservedUntil)
+            FROM Order o
+            WHERE o.groupPurchase.id = :groupPurchaseId
+              AND o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
+              AND o.reservedUntil > :now
+            """)
+    Optional<LocalDateTime> findMaxReservedUntil(
+            @Param("groupPurchaseId") Long groupPurchaseId,
+            @Param("now") LocalDateTime now
+    );
 }
