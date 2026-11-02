@@ -11,7 +11,12 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @EntityGraph(attributePaths = {"groupPurchase", "groupPurchase.store", "groupPurchase.product"})
@@ -65,33 +70,61 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     );
 
     @Query("""
-            SELECT COALESCE(SUM(o.quantity), 0)
-            FROM Order o
-            WHERE o.groupPurchase.id = :groupPurchaseId
-              AND o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
-              AND (o.reservedUntil IS NULL OR o.reservedUntil > :now)
-            """)
+        SELECT COALESCE(SUM(o.quantity), 0)
+        FROM Order o
+        WHERE o.groupPurchase.id = :groupPurchaseId
+          AND (
+                o.status = com.siheung.hanbaguni.entity.Order.Status.PAYMENT_PENDING
+                OR (
+                    o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
+                    AND (o.reservedUntil IS NULL OR o.reservedUntil > :now)
+                )
+          )
+        """)
     int sumActivePendingQuantity(
             @Param("groupPurchaseId") Long groupPurchaseId,
             @Param("now") LocalDateTime now
     );
 
+
     @Query("""
-            SELECT COALESCE(SUM(o.quantity), 0)
-            FROM Order o
-            WHERE o.groupPurchase.id = :groupPurchaseId
-              AND o.user.id = :userId
-              AND (
-                    o.status = com.siheung.hanbaguni.entity.Order.Status.PAID
-                    OR (
-                        o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
-                        AND (o.reservedUntil IS NULL OR o.reservedUntil > :now)
-                    )
-              )
-            """)
+        SELECT COALESCE(SUM(o.quantity), 0)
+        FROM Order o
+        WHERE o.groupPurchase.id = :groupPurchaseId
+          AND o.user.id = :userId
+          AND (
+                o.status = com.siheung.hanbaguni.entity.Order.Status.PAID
+                OR o.status = com.siheung.hanbaguni.entity.Order.Status.PAYMENT_PENDING
+                OR (
+                    o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
+                    AND (o.reservedUntil IS NULL OR o.reservedUntil > :now)
+                )
+          )
+        """)
     int sumUserActiveQuantity(
             @Param("groupPurchaseId") Long groupPurchaseId,
             @Param("userId") Long userId,
             @Param("now") LocalDateTime now
+    );
+
+    @Query("""
+        select o.groupPurchase.id
+        from Order o
+        where o.id = :orderId
+          and o.user.id = :userId
+        """)
+    Optional<Long> findPaymentGroupId(
+            @Param("orderId") Long orderId,
+            @Param("userId") Long userId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        select o
+        from Order o
+        where o.id = :orderId
+        """)
+    Optional<Order> findPaymentOrderWithLock(
+            @Param("orderId") Long orderId
     );
 }

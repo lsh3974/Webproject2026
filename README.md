@@ -514,3 +514,65 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - **가독성 최적화**:
   - 상품 단위(`unit`)가 `"30개"`, `"10개"` 등 숫자가 포함된 경우 화면에 숫자가 겹쳐 보이던 문제를 개선하여, 상단 상품명에만 단위를 명시하고 수량 영역은 순수 숫자만 깔끔하게 출력합니다.
 - **DB 스키마 추가**: `database/005-create-orders.sql` (주문 테이블 생성)
+
+## 9번: 선결제
+
+### 실행 환경
+
+- Toss API 개별 연동 테스트 카드 결제를 사용합니다.
+- IntelliJ 실행 환경변수에 다음 값을 설정합니다.
+    - `TOSS_CLIENT_KEY`: `test_ck_`로 시작하는 테스트 클라이언트 키
+    - `TOSS_SECRET_KEY`: `test_sk_`로 시작하는 테스트 시크릿 키
+- 키와 DB 비밀번호는 저장소에 커밋하지 않습니다.
+- 기본 실행 주소는 `http://localhost:8080`입니다.
+- 다른 주소로 실행할 경우 `PAYMENT_BASE_URL`을 설정합니다.
+
+### DB 적용
+
+기존 SQL 다음에 아래 파일을 순서대로 적용합니다.
+
+1. `006-add-payment-pending-status.sql`
+2. `007-add-order-version.sql`
+3. `008-add-payment-order-ref.sql`
+
+이미 적용한 파일은 다시 실행하지 않습니다.
+
+### 결제 처리
+
+- 로그인한 주문 소유자만 결제할 수 있습니다.
+- 서버에 저장된 주문번호와 금액을 검증합니다.
+- 예약 기한 안에 승인 처리를 시작해야 합니다.
+- 승인 시작 시 `PAYMENT_PENDING`으로 변경합니다.
+- Toss에서 승인을 확인한 뒤 `PAID`로 변경합니다.
+- 같은 승인 요청을 다시 보내도 완료 수량은 한 번만 증가합니다.
+- 승인 여부가 불확실하면 예약 수량을 유지합니다.
+- 주문 상세의 결제 결과 확인 버튼으로 재확인할 수 있습니다.
+- Toss에서 `ABORTED` 또는 `EXPIRED`를 확인하면 주문을 만료 처리합니다.
+
+### 관련 경로
+
+| 메서드 | 경로 | 기능 |
+|---|---|---|
+| GET | `/orders/{id}/payment` | 결제 화면 |
+| POST | `/orders/{id}/payment/prepare` | 결제 정보 준비 |
+| POST | `/orders/{id}/payment/confirm` | 결제 승인 |
+| POST | `/orders/{id}/payment/retry` | 결제 결과 재확인 |
+
+POST 요청은 Spring Security의 CSRF 검증을 유지합니다.
+
+### 검증
+
+- [o] PaymentFlowTest 통과
+- [o] PaymentPendingQuantityTest 통과
+- [o] Toss 테스트 결제 성공
+- [o] 주문의 PAID 저장 확인
+- [o] 중복 요청 시 모집 수량 중복 증가 없음
+- [o] 다른 회원의 주문 접근 차단
+- [o] 만료된 예약 결제 차단
+
+### 범위
+
+이번 작업은 9번 선결제입니다.
+
+10번 마감·취소·환불, 자동 재조회 스케줄러 및 웹훅 처리는
+이번 구현에 포함하지 않습니다.

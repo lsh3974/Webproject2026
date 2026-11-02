@@ -142,6 +142,19 @@ public class GroupPurchase {
         }
     }
 
+    public void addPaidQuantity(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException(
+                    "결제 수량은 1개 이상이어야 합니다."
+            );
+        }
+
+        this.currentQuantity = Math.addExact(
+                this.currentQuantity,
+                quantity
+        );
+    }
+
     public enum Status {
         DRAFT, OPEN, SUCCESS, FAILED, CLOSED
     }
