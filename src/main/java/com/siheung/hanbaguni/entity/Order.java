@@ -20,6 +20,9 @@ public class Order {
     @Column(name = "payment_order_ref", length = 64, unique = true)
     private String paymentOrderRef;
 
+    @Column(name = "payment_rejection_code", length = 100)
+    private String paymentRejectionCode;
+
     @Version
     @Column(nullable = false)
     private Long version;
@@ -173,6 +176,21 @@ public class Order {
 
         status = Status.EXPIRED;
         cancelReason = "결제 승인 실패 또는 결제 유효 시간 만료";
+    }
+    public void recordPaymentRejection(String code) {
+        if (status != Status.PAYMENT_PENDING) {
+            throw new IllegalStateException(
+                    "결제 승인 확인 중인 주문에만 오류를 기록할 수 있습니다."
+            );
+        }
+
+        if (code == null || code.isBlank() || code.length() > 100) {
+            throw new IllegalArgumentException(
+                    "올바른 결제 오류 코드가 필요합니다."
+            );
+        }
+
+        this.paymentRejectionCode = code;
     }
 
     public enum Status {

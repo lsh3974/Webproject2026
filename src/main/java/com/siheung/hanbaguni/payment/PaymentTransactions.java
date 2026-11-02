@@ -34,6 +34,7 @@ public class PaymentTransactions {
         this.groups = groups;
     }
 
+    // 결제창에 전달할 주문번호와 금액을 준비합니다.
     public Prepared prepare(Long orderId, Long userId) {
         Order order = lockOwnedOrder(orderId, userId);
 
@@ -51,6 +52,7 @@ public class PaymentTransactions {
         );
     }
 
+    // 최초 요청에만 Toss 승인 API 호출 권한을 부여합니다.
     public Attempt begin(
             Long orderId,
             Long userId,
@@ -71,14 +73,20 @@ public class PaymentTransactions {
         )
                 || request.amount().longValue()
                 != order.getTotalPrice().longValue()) {
-            throw badRequest("주문번호 또는 결제 금액이 올바르지 않습니다.");
+            throw badRequest(
+                    "주문번호 또는 결제 금액이 올바르지 않습니다."
+            );
         }
+
+        boolean confirmationAllowed = false;
 
         if (order.getStatus() == Order.Status.PENDING) {
             validatePendingOrder(order);
 
             order.beginPayment(LocalDateTime.now());
             order.bindPaymentKey(request.paymentKey());
+
+            confirmationAllowed = true;
 
         } else if (order.getStatus() == Order.Status.PAYMENT_PENDING
                 || order.getStatus() == Order.Status.PAID) {
@@ -87,16 +95,19 @@ public class PaymentTransactions {
                     order.getPaymentKey(),
                     request.paymentKey()
             )) {
-                throw conflict("이미 다른 결제 요청이 처리되었습니다.");
+                throw conflict(
+                        "이미 다른 결제 요청이 처리되었습니다. 주문 상세에서 결과를 확인해주세요."
+                );
             }
 
         } else {
             throw conflict("결제할 수 없는 주문 상태입니다.");
         }
 
-        return toAttempt(order, userId);
+        return toAttempt(order, userId, confirmationAllowed);
     }
 
+    // 재확인에서는 승인 요청 없이 조회에 필요한 정보만 반환합니다.
     public Attempt resume(Long orderId, Long userId) {
         Order order = lockOwnedOrder(orderId, userId);
 
@@ -110,9 +121,10 @@ public class PaymentTransactions {
             throw conflict("저장된 결제 정보가 없습니다.");
         }
 
-        return toAttempt(order, userId);
+        return toAttempt(order, userId, false);
     }
 
+    // Toss의 승인 완료 결과를 확인한 뒤 결제 완료로 변경합니다.
     public Result complete(Attempt attempt, Receipt receipt) {
         Order order = lockOwnedOrder(
                 attempt.orderId(),
@@ -126,21 +138,27 @@ public class PaymentTransactions {
         }
 
         if (order.getStatus() != Order.Status.PAYMENT_PENDING) {
-            throw conflict("현재 주문 상태에서 결제를 완료할 수 없습니다.");
+            throw conflict(
+                    "현재 주문 상태에서 결제를 완료할 수 없습니다."
+            );
         }
 
         if (!matches(attempt, receipt)
                 || !"DONE".equals(receipt.status())) {
-            throw conflict("결제 승인 결과가 주문 정보와 일치하지 않습니다.");
+            throw conflict(
+                    "결제 승인 결과가 주문 정보와 일치하지 않습니다."
+            );
         }
 
         order.markPaid(attempt.paymentKey());
+
         order.getGroupPurchase()
                 .addPaidQuantity(order.getQuantity());
 
         return paidResult();
     }
 
+    // Toss의 결제 객체에서 실패 또는 만료가 확인된 경우입니다.
     public Result fail(Attempt attempt, Receipt receipt) {
         Order order = lockOwnedOrder(
                 attempt.orderId(),
@@ -149,7 +167,6 @@ public class PaymentTransactions {
 
         validateStoredAttempt(order, attempt);
 
-        // 다른 요청에서 이미 완료했다면 완료 상태를 유지합니다.
         if (order.getStatus() == Order.Status.PAID) {
             return paidResult();
         }
@@ -162,6 +179,11 @@ public class PaymentTransactions {
 
         if (order.getStatus() == Order.Status.PAYMENT_PENDING) {
             order.failPayment();
+
+        } else if (order.getStatus() != Order.Status.EXPIRED) {
+            throw conflict(
+                    "현재 주문 상태에서 결제 실패 처리할 수 없습니다."
+            );
         }
 
         return new Result(
@@ -170,6 +192,87 @@ public class PaymentTransactions {
         );
     }
 
+    // 최초 승인 요청에서 받은 명시적인 거절 응답을 저장합니다.
+    public Attempt recordRejection(
+            Attempt attempt,
+            TossPaymentException exception
+    ) {
+        if (!attempt.confirmationAllowed() // 에러
+                || !PaymentErrorPolicy.isDefiniteRejection(exception)) {
+            throw conflict("확정적인 승인 거절 응답이 아닙니다.");
+        }
+
+        Order order = lockOwnedOrder(
+                attempt.orderId(),
+                attempt.userId()
+        );
+
+        validateStoredAttempt(order, attempt);
+
+        if (order.getStatus() == Order.Status.PAID) {
+            return toAttempt(order, attempt.userId(), false);
+        }
+
+        if (order.getStatus() != Order.Status.PAYMENT_PENDING) {
+            throw conflict(
+                    "승인 거절을 기록할 수 없는 주문 상태입니다."
+            );
+        }
+
+        order.recordPaymentRejection(exception.getErrorCode());
+
+        return toAttempt(order, attempt.userId(), false);
+    }
+
+    // 승인 거절 기록과 주문번호 조회 결과를 함께 확인합니다.
+    public Result expireRejectedPayment(
+            Attempt attempt,
+            TossPaymentException lookupException
+    ) {
+        if (!PaymentErrorPolicy.isPaymentNotFound(lookupException)) {
+            throw conflict(
+                    "결제 정보가 없다는 조회 결과가 필요합니다."
+            );
+        }
+
+        Order order = lockOwnedOrder(
+                attempt.orderId(),
+                attempt.userId()
+        );
+
+        validateStoredAttempt(order, attempt);
+
+        if (order.getStatus() == Order.Status.PAID) {
+            return paidResult();
+        }
+
+        String rejectionCode = order.getPaymentRejectionCode();
+
+        boolean hasRejectionEvidence =
+                "INVALID_PAYMENT_KEY".equals(rejectionCode)
+                        || "NOT_FOUND_PAYMENT".equals(rejectionCode)
+                        || "NOT_FOUND_PAYMENT_SESSION".equals(rejectionCode);
+
+        if (!hasRejectionEvidence) {
+            throw conflict(
+                    "승인 거절 기록이 없어 주문을 만료시킬 수 없습니다."
+            );
+        }
+
+        if (order.getStatus() == Order.Status.PAYMENT_PENDING) {
+            order.failPayment();
+
+        } else if (order.getStatus() != Order.Status.EXPIRED) {
+            throw conflict("만료 처리할 수 없는 주문 상태입니다.");
+        }
+
+        return new Result(
+                "EXPIRED",
+                "결제가 승인되지 않아 주문을 종료했습니다. 새 주문으로 다시 진행해주세요."
+        );
+    }
+
+    // 모집 → 주문 순서로 잠근 뒤 주문 소유자와 회원 상태를 확인합니다.
     private Order lockOwnedOrder(Long orderId, Long userId) {
         Long groupId = orders.findPaymentGroupId(orderId, userId)
                 .orElseThrow(() -> new ResponseStatusException(
@@ -177,7 +280,6 @@ public class PaymentTransactions {
                         "주문을 찾을 수 없습니다."
                 ));
 
-        // 예약 처리와 동일하게 모집 → 주문 순서로 잠급니다.
         groups.findByIdWithLock(groupId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -207,11 +309,14 @@ public class PaymentTransactions {
         return order;
     }
 
+    // 승인을 시작하기 전에 예약·모집·수량·금액을 확인합니다.
     private void validatePendingOrder(Order order) {
         LocalDateTime now = LocalDateTime.now();
 
         if (order.getStatus() != Order.Status.PENDING) {
-            throw conflict("결제 대기 상태의 주문만 결제할 수 있습니다.");
+            throw conflict(
+                    "결제 대기 상태의 주문만 결제할 수 있습니다."
+            );
         }
 
         if (order.getReservedUntil() == null
@@ -234,7 +339,9 @@ public class PaymentTransactions {
                 group.getStore().getSeller().getId(),
                 order.getUserId()
         )) {
-            throw conflict("본인 매장의 공동구매는 결제할 수 없습니다.");
+            throw conflict(
+                    "본인 매장의 공동구매는 결제할 수 없습니다."
+            );
         }
 
         if (order.getQuantity() == null
@@ -245,7 +352,9 @@ public class PaymentTransactions {
                 || order.getTotalPrice() <= 0
                 || (long) order.getQuantity() * order.getUnitPrice()
                 != order.getTotalPrice()) {
-            throw conflict("주문의 수량 또는 금액이 올바르지 않습니다.");
+            throw conflict(
+                    "주문의 수량 또는 금액이 올바르지 않습니다."
+            );
         }
 
         int paid = Math.max(
@@ -261,7 +370,7 @@ public class PaymentTransactions {
                 now
         );
 
-        // pending에는 현재 주문도 이미 포함되어 있습니다.
+        // pending에는 현재 주문도 포함되어 있습니다.
         if ((long) paid + pending > group.getMaxQuantity()) {
             throw conflict("공동구매 가능 수량을 초과했습니다.");
         }
@@ -278,14 +387,20 @@ public class PaymentTransactions {
         }
     }
 
-    private Attempt toAttempt(Order order, Long userId) {
+    private Attempt toAttempt(
+            Order order,
+            Long userId,
+            boolean confirmationAllowed
+    ) {
         return new Attempt(
                 order.getId(),
                 userId,
                 order.getPaymentOrderRef(),
                 order.getPaymentKey(),
                 order.getTotalPrice(),
-                order.getStatus() == Order.Status.PAID
+                order.getStatus() == Order.Status.PAID,
+                confirmationAllowed,
+                order.getPaymentRejectionCode() // 에러
         );
     }
 

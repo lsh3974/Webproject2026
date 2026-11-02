@@ -7,6 +7,7 @@ public final class PaymentData {
     private PaymentData() {
     }
 
+    // 결제창에 전달할 준비 정보
     public record Prepared(
             Long orderId,
             String orderRef,
@@ -15,6 +16,7 @@ public final class PaymentData {
     ) {
     }
 
+    // 브라우저에서 서버로 전달하는 승인 요청
     public record ConfirmRequest(
             String paymentKey,
             String orderId,
@@ -22,16 +24,20 @@ public final class PaymentData {
     ) {
     }
 
+    // 서버 내부의 승인·재확인 처리 정보
     public record Attempt(
             Long orderId,
             Long userId,
             String orderRef,
             String paymentKey,
             int amount,
-            boolean paid
+            boolean paid,
+            boolean confirmationAllowed,
+            String rejectionCode
     ) {
     }
 
+    // Toss가 반환하는 결제 정보
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Receipt(
             String paymentKey,
@@ -42,6 +48,7 @@ public final class PaymentData {
     ) {
     }
 
+    // 화면에 전달할 처리 결과
     public record Result(
             String status,
             String message

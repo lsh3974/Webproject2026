@@ -23,6 +23,12 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:payment_flow;MODE=MySQL;DB_CLOSE_DELAY=-1",
@@ -93,7 +99,7 @@ class PaymentFlowTest {
                 request(prepared.amount())
         )).isInstanceOf(ResponseStatusException.class);
 
-        verifyNoInteractions(gateway);
+        verify(gateway, never()).find(anyString());
 
         assertThat(snapshot().status()).isEqualTo(Order.Status.PENDING);
     }
@@ -103,7 +109,7 @@ class PaymentFlowTest {
         assertThatThrownBy(() -> confirm(1))
                 .isInstanceOf(ResponseStatusException.class);
 
-        verifyNoInteractions(gateway);
+        verify(gateway, never()).findByOrderId(anyString());
 
         assertThat(snapshot().status()).isEqualTo(Order.Status.PENDING);
     }
@@ -127,7 +133,7 @@ class PaymentFlowTest {
         assertThatThrownBy(() -> confirm(prepared.amount()))
                 .isInstanceOf(ResponseStatusException.class);
 
-        verifyNoInteractions(gateway);
+        verify(gateway, never()).confirm(any());
     }
 
     @Test
@@ -152,6 +158,9 @@ class PaymentFlowTest {
         when(gateway.find(anyString()))
                 .thenThrow(new ResourceAccessException("timeout"));
 
+        when(gateway.findByOrderId(anyString()))
+                .thenThrow(new ResourceAccessException("timeout"));
+
         Result first = confirm(prepared.amount());
 
         assertThat(first.status()).isEqualTo("PAYMENT_PENDING");
@@ -159,9 +168,10 @@ class PaymentFlowTest {
                 .isEqualTo(Order.Status.PAYMENT_PENDING);
         assertThat(snapshot().currentQuantity()).isZero();
 
+        // 재확인은 승인 재요청이 아니라 조회로 복구합니다.
         doReturn(receipt("DONE", prepared.amount()))
                 .when(gateway)
-                .confirm(any());
+                .find(paymentKey);
 
         Result retried = payments.retry(
                 fixture.orderId(),
@@ -170,6 +180,9 @@ class PaymentFlowTest {
 
         assertThat(retried.status()).isEqualTo("PAID");
         assertThat(snapshot().currentQuantity()).isEqualTo(2);
+
+        // 처음 요청한 승인 API는 총 한 번만 호출돼야 합니다.
+        verify(gateway, times(1)).confirm(any());
     }
 
     @Test
@@ -197,6 +210,215 @@ class PaymentFlowTest {
         assertThat(snapshot().currentQuantity()).isZero();
     }
 
+    @Test
+    void 잘못된_키로_승인거절되고_주문번호에도_결제가_없으면_종료한다() {
+        TossPaymentException rejected = new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE,
+                400,
+                "INVALID_PAYMENT_KEY"
+        );
+
+        TossPaymentException notFound = new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE,
+                404,
+                "NOT_FOUND_PAYMENT"
+        );
+
+        when(gateway.confirm(any())).thenThrow(rejected);
+        when(gateway.find(paymentKey)).thenThrow(notFound);
+        when(gateway.findByOrderId(prepared.orderRef()))
+                .thenThrow(notFound);
+
+        Result result = confirm(prepared.amount());
+
+        assertThat(result.status()).isEqualTo("EXPIRED");
+        assertThat(snapshot().status()).isEqualTo(Order.Status.EXPIRED);
+        assertThat(snapshot().currentQuantity()).isZero();
+
+        verify(gateway, times(1)).confirm(any());
+    }
+
+    @Test
+    void 승인응답이_불확실하면_조회결과가_없어도_만료시키지_않는다() {
+        TossPaymentException notFound = new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE,
+                404,
+                "NOT_FOUND_PAYMENT"
+        );
+
+        when(gateway.confirm(any()))
+                .thenThrow(new ResourceAccessException("timeout"));
+
+        when(gateway.find(paymentKey)).thenThrow(notFound);
+        when(gateway.findByOrderId(prepared.orderRef()))
+                .thenThrow(notFound);
+
+        Result result = confirm(prepared.amount());
+
+        assertThat(result.status()).isEqualTo("PAYMENT_PENDING");
+        assertThat(snapshot().status())
+                .isEqualTo(Order.Status.PAYMENT_PENDING);
+        assertThat(snapshot().currentQuantity()).isZero();
+    }
+
+
+    @Test
+    void 승인거절_기록을_저장한뒤_조회가_실패해도_재확인으로_종료한다() {
+        TossPaymentException rejected = new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE,
+                400,
+                "INVALID_PAYMENT_KEY"
+        );
+
+        TossPaymentException notFound = new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE,
+                404,
+                "NOT_FOUND_PAYMENT"
+        );
+
+        when(gateway.confirm(any())).thenThrow(rejected);
+
+        when(gateway.find(paymentKey))
+                .thenThrow(new ResourceAccessException("timeout"));
+
+        when(gateway.findByOrderId(prepared.orderRef()))
+                .thenThrow(new ResourceAccessException("timeout"));
+
+        // 승인 거절은 받았지만 조회가 실패한 첫 번째 요청
+        Result first = confirm(prepared.amount());
+
+        assertThat(first.status()).isEqualTo("PAYMENT_PENDING");
+        assertThat(snapshot().status())
+                .isEqualTo(Order.Status.PAYMENT_PENDING);
+        assertThat(snapshot().currentQuantity()).isZero();
+
+        // 거절 근거가 DB에 저장됐는지 확인
+        String savedCode = tx.execute(status ->
+                em.find(Order.class, fixture.orderId())
+                        .getPaymentRejectionCode()
+        );
+
+        assertThat(savedCode).isEqualTo("INVALID_PAYMENT_KEY");
+
+        // 통신이 복구되어 결제 정보 없음을 확인할 수 있게 됨
+        doThrow(notFound)
+                .when(gateway)
+                .find(paymentKey);
+
+        doThrow(notFound)
+                .when(gateway)
+                .findByOrderId(prepared.orderRef());
+
+        Result retried = payments.retry(
+                fixture.orderId(),
+                fixture.buyerId()
+        );
+
+        assertThat(retried.status()).isEqualTo("EXPIRED");
+        assertThat(snapshot().status()).isEqualTo(Order.Status.EXPIRED);
+        assertThat(snapshot().currentQuantity()).isZero();
+
+        // 재확인하면서 승인 API를 다시 호출하지 않았는지 확인
+        verify(gateway, times(1)).confirm(any());
+        verify(gateway, times(2))
+                .findByOrderId(prepared.orderRef());
+    }
+
+
+    @Test
+    void 승인응답을_기다리는_동안_중복요청이_와도_승인은_한번만_호출한다()
+            throws Exception {
+
+        CountDownLatch approvalStarted = new CountDownLatch(1);
+        CountDownLatch releaseApproval = new CountDownLatch(1);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        Receipt approvedReceipt = receipt(
+                "DONE",
+                prepared.amount()
+        );
+
+        TossPaymentException notFound = new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE,
+                404,
+                "NOT_FOUND_PAYMENT"
+        );
+
+        // 첫 승인 호출을 잠시 대기시킵니다.
+        when(gateway.confirm(any())).thenAnswer(invocation -> {
+            approvalStarted.countDown();
+
+            boolean released = releaseApproval.await(
+                    10,
+                    TimeUnit.SECONDS
+            );
+
+            if (!released) {
+                throw new AssertionError(
+                        "테스트에서 승인 응답 대기를 해제하지 못했습니다."
+                );
+            }
+
+            return approvedReceipt;
+        });
+
+        // 첫 승인이 처리 중이므로 조회에서는 아직 결제가 보이지 않음
+        when(gateway.find(paymentKey)).thenThrow(notFound);
+
+        when(gateway.findByOrderId(prepared.orderRef()))
+                .thenThrow(notFound);
+
+        try {
+            Future<Result> firstRequest = executor.submit(
+                    () -> confirm(prepared.amount())
+            );
+
+            assertThat(approvalStarted.await(5, TimeUnit.SECONDS))
+                    .as("첫 번째 요청이 승인 API 호출까지 도달해야 합니다.")
+                    .isTrue();
+
+            // 첫 요청이 승인 응답을 기다리는 동안 같은 요청을 보냅니다.
+            Future<Result> duplicateRequest = executor.submit(
+                    () -> confirm(prepared.amount())
+            );
+
+            Result duplicateResult = duplicateRequest.get(
+                    5,
+                    TimeUnit.SECONDS
+            );
+
+            assertThat(duplicateResult.status())
+                    .isEqualTo("PAYMENT_PENDING");
+
+            assertThat(snapshot().status())
+                    .isEqualTo(Order.Status.PAYMENT_PENDING);
+
+            assertThat(snapshot().currentQuantity()).isZero();
+
+            verify(gateway, times(1)).confirm(any());
+
+            // 첫 번째 승인 응답을 돌려줍니다.
+            releaseApproval.countDown();
+
+            Result firstResult = firstRequest.get(
+                    5,
+                    TimeUnit.SECONDS
+            );
+
+            assertThat(firstResult.status()).isEqualTo("PAID");
+            assertThat(snapshot().status()).isEqualTo(Order.Status.PAID);
+            assertThat(snapshot().currentQuantity()).isEqualTo(2);
+
+            // 완료 후에도 승인 호출과 수량 반영은 한 번뿐이어야 합니다.
+            verify(gateway, times(1)).confirm(any());
+
+        } finally {
+            releaseApproval.countDown();
+            executor.shutdownNow();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
+    }
     private Result confirm(long amount) {
         return payments.confirm(
                 fixture.orderId(),
