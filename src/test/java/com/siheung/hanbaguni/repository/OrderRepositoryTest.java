@@ -27,6 +27,13 @@ class OrderRepositoryTest {
     }
 
     @Test
+    @DisplayName("공동구매 ID로 주문 존재 여부 확인 JPQL 정상 동작 검증")
+    void testExistsByGroupPurchaseId() {
+        boolean exists = orderRepository.existsByGroupPurchaseId(1L);
+        assertThat(exists).isFalse();
+    }
+
+    @Test
     @DisplayName("기한 만료된 PENDING 주문 조회 JPQL 정상 동작 검증")
     void testFindExpiredPendingQueries() {
         LocalDateTime now = LocalDateTime.now();
