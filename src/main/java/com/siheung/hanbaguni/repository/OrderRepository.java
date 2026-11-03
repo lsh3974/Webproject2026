@@ -27,7 +27,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT o FROM Order o WHERE o.id = :id")
     Optional<Order> findByIdWithLock(@Param("id") Long id);
 
-    boolean existsByGroupPurchaseId(Long groupPurchaseId);
+    @Query("SELECT CASE WHEN COUNT(o) > 0 THEN true ELSE false END FROM Order o WHERE o.groupPurchase.id = :groupPurchaseId")
+    boolean existsByGroupPurchaseId(@Param("groupPurchaseId") Long groupPurchaseId);
 
     @Query("""
             SELECT o FROM Order o
