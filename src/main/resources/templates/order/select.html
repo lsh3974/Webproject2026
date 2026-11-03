@@ -5,43 +5,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>공동구매 선택 · 수량 예약 - 시흥한바구니</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 </head>
-<body class="bg-light">
+<body class="ui-app ui-order ui-order-select">
 
-<nav class="navbar bg-white border-bottom">
-    <div class="container d-flex flex-wrap gap-3">
-        <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
-        <div class="d-flex align-items-center gap-3">
-            <a th:href="@{/orders}" class="text-decoration-none text-secondary">내 주문·예약 내역</a>
-            <a th:href="@{/}" class="text-decoration-none text-secondary">홈으로</a>
-        </div>
-    </div>
-</nav>
+<div th:replace="~{fragments/ui :: buyerHeader}"></div>
 
-<main class="container py-5">
-    <div class="mb-4">
+<main id="main" class="container ui-main">
+    <div class="ui-section-top"><div>
         <h1 class="h3 fw-bold mb-1">수량 예약할 공동구매 선택</h1>
         <p class="text-secondary mb-0">현재 모집 중인 우리 동네 공동구매 상품을 선택해 수량을 예약하세요.</p>
-    </div>
+    </div><a class="btn btn-outline-success" th:href="@{/orders}">내 주문·예약 보기</a></div>
 
     <div th:if="${#lists.isEmpty(openGroupPurchases)}" class="card border-0 shadow-sm text-center p-5">
         <div class="card-body">
             <p class="text-secondary fs-5 mb-2">현재 참여 가능한 공동구매 모집이 없습니다.</p>
-            <a th:href="@{/}" class="btn btn-outline-success mt-2">홈으로 돌아가기</a>
+            <a th:href="@{/group-purchases}" class="btn btn-outline-success mt-2">공동구매 둘러보기</a>
         </div>
     </div>
 
-    <div th:unless="${#lists.isEmpty(openGroupPurchases)}" class="row g-4">
+    <div th:unless="${#lists.isEmpty(openGroupPurchases)}" class="row g-4 ui-reservation-grid">
         <div class="col-12 col-md-6" th:each="gp : ${openGroupPurchases}">
-            <div class="card h-100 border-0 shadow-sm">
+            <div class="card ui-reservation-card h-100 border-0 shadow-sm">
+                <div class="ui-product-media">
+                    <img data-product-image loading="lazy" th:if="${gp.productImageUrl != null and !#strings.isEmpty(gp.productImageUrl)}" th:src="@{${gp.productImageUrl}}" th:alt="${gp.productName}">
+                    <div class="ui-media-placeholder" th:unless="${gp.productImageUrl != null and !#strings.isEmpty(gp.productImageUrl)}">등록된 상품 사진 없음</div>
+                </div>
                 <div class="card-body p-4 d-flex flex-column">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <span class="badge bg-success-subtle text-success border border-success-subtle"
                               th:text="${gp.storeName}">매장명</span>
                         <span class="badge bg-light text-dark border"
-                              th:text="'잔여 ' + ${gp.remainingQuantity} + ${gp.unit}">잔여 10개</span>
+                              th:text="'잔여 수량 ' + ${gp.remainingQuantity}">잔여 수량 10</span>
                     </div>
 
                     <h2 class="h5 fw-bold mb-1" th:text="${gp.title}">공동구매 제목</h2>
@@ -72,5 +67,6 @@
     </div>
 </main>
 
+<div th:replace="~{fragments/ui :: footer}"></div>
 </body>
 </html>
