@@ -1,0 +1,215 @@
+﻿<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="'주문 #' + ${order.id} + ' 상세 - 시흥한바구니'">주문 상세 - 시흥한바구니</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+<body class="bg-light">
+
+<nav class="navbar bg-white border-bottom">
+    <div class="container d-flex flex-wrap gap-3">
+        <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
+        <div class="d-flex align-items-center gap-3">
+            <a th:href="@{/group-purchases}" class="text-decoration-none text-secondary">공동구매 둘러보기</a>
+            <a th:href="@{/orders}" class="text-decoration-none text-secondary">내 주문 목록</a>
+            <a th:href="@{/}" class="text-decoration-none text-secondary">홈으로</a>
+        </div>
+    </div>
+</nav>
+
+<main class="container py-5" style="max-width: 820px;">
+    <!-- 상단 이동 및 상태 알림 -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <a th:href="@{/orders}" class="text-decoration-none text-secondary small">
+            &larr; 내 주문 · 수량 예약 목록으로
+        </a>
+        <div>
+            <span th:if="${order.status.name() == 'PENDING'}" class="badge bg-warning text-dark fs-6 px-3 py-2">수량 선점중 (결제 대기)</span>
+            <span th:if="${order.status.name() == 'PAID'}" class="badge bg-success fs-6 px-3 py-2">결제 완료</span>
+            <span th:if="${order.status.name() == 'CANCELLED'}" class="badge bg-secondary fs-6 px-3 py-2">예약 취소됨</span>
+            <span th:if="${order.status.name() == 'EXPIRED'}" class="badge bg-danger fs-6 px-3 py-2">예약 기한 만료</span>
+            <span th:if="${order.status.name() == 'REFUNDED'}" class="badge bg-info text-dark fs-6 px-3 py-2">환불 완료</span>
+        </div>
+    </div>
+
+    <!-- 플래시 알림 메시지 -->
+    <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show" role="alert">
+        <span th:text="${successMessage}">성공 메시지</span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="닫기"></button>
+    </div>
+    <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <span th:text="${errorMessage}">오류 메시지</span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="닫기"></button>
+    </div>
+
+    <!-- 결제 대기 카운트다운 배너 -->
+    <div th:if="${order.status.name() == 'PENDING' and order.reservedUntil != null}"
+         class="alert alert-warning border-warning d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <div class="fw-bold mb-1">⏳ 수량이 안전하게 선점되어 있습니다.</div>
+            <div class="small">
+                결제 마감 기한: <strong th:text="${#temporals.format(order.reservedUntil, 'yyyy-MM-dd HH:mm:ss')}">2026-10-31 15:30:00</strong>
+            </div>
+        </div>
+        <div class="text-end">
+            <span class="small text-muted d-block">남은 선점 시간</span>
+            <span class="fs-4 fw-bold text-danger" id="countdownTimer">계산 중...</span>
+        </div>
+    </div>
+
+    <!-- 주문 상세 카드 -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4 p-md-5">
+            <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-4">
+                <div>
+                    <span class="text-muted small">주문 번호</span>
+                    <h1 class="h4 fw-bold mb-0" th:text="'#' + ${order.id}">#123</h1>
+                </div>
+                <div class="text-end">
+                    <span class="text-muted small">주문자</span>
+                    <div class="fw-semibold" th:text="${order.user.displayName}">홍길동</div>
+                    <div class="small text-muted" th:text="${order.user.email}">user@example.com</div>
+                </div>
+            </div>
+
+            <!-- 공동구매 및 상품 요약 -->
+            <h2 class="h5 fw-bold mb-3" th:text="${order.groupPurchase.title}">공동구매 제목</h2>
+            <div class="p-3 bg-light rounded-3 mb-4">
+                <div class="row g-3">
+                    <div class="col-12 col-sm-4">
+                        <div class="text-muted small">예약 상품</div>
+                        <div class="fw-semibold"
+                             th:text="${order.groupPurchase.product.name} + ' (단위: ' + ${order.groupPurchase.product.unit} + ')'">
+                            사과 (1박스)
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="text-muted small">예약 수량 · 단가</div>
+                        <div class="fw-semibold">
+                            <span th:text="${order.quantity} + ' ' + ${order.groupPurchase.product.unit}">2 개</span>
+                            ×
+                            <span th:text="${#numbers.formatInteger(order.unitPrice, 1, 'COMMA')} + '원'">8,500원</span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-sm-4">
+                        <div class="text-muted small">총 주문 금액</div>
+                        <div class="fs-5 fw-bold text-success"
+                             th:text="${#numbers.formatInteger(order.totalPrice, 1, 'COMMA')} + '원'">17,000원</div>
+                    </div>
+                </div>
+            </div>
+
+            <h2 class="h6 fw-bold mb-2">수령 매장 및 일정</h2>
+            <dl class="row small mb-0">
+                <dt class="col-sm-3 text-secondary">수령 매장</dt>
+                <dd class="col-sm-9 fw-semibold" th:text="${order.groupPurchase.store.name}">시흥마트</dd>
+
+                <dt class="col-sm-3 text-secondary">매장 주소</dt>
+                <dd class="col-sm-9">
+                    <span th:text="${order.groupPurchase.store.address}">경기도 시흥시</span>
+                    <span th:if="${order.groupPurchase.store.addressDetail != null}"
+                          th:text="' ' + ${order.groupPurchase.store.addressDetail}"></span>
+                </dd>
+
+                <dt class="col-sm-3 text-secondary">수령 기간</dt>
+                <dd class="col-sm-9">
+                    <span th:text="${#temporals.format(order.groupPurchase.pickupStartAt, 'yyyy-MM-dd HH:mm')}"></span>
+                    ~
+                    <span th:text="${#temporals.format(order.groupPurchase.pickupEndAt, 'yyyy-MM-dd HH:mm')}"></span>
+                </dd>
+
+                <dt class="col-sm-3 text-secondary"
+                    th:if="${order.groupPurchase.pickupNotice != null and !#strings.isEmpty(order.groupPurchase.pickupNotice)}">
+                    수령 안내
+                </dt>
+                <dd class="col-sm-9"
+                    th:if="${order.groupPurchase.pickupNotice != null and !#strings.isEmpty(order.groupPurchase.pickupNotice)}"
+                    th:text="${order.groupPurchase.pickupNotice}">매장 카운터 문의</dd>
+
+                <dt class="col-sm-3 text-secondary" th:if="${order.createdAt != null}">예약 신청 일시</dt>
+                <dd class="col-sm-9" th:if="${order.createdAt != null}"
+                    th:text="${#temporals.format(order.createdAt, 'yyyy-MM-dd HH:mm:ss')}"></dd>
+
+                <dt class="col-sm-3 text-secondary" th:if="${order.paymentKey != null}">결제 번호</dt>
+                <dd class="col-sm-9" th:if="${order.paymentKey != null}" th:text="${order.paymentKey}"></dd>
+
+                <dt class="col-sm-3 text-secondary"
+                    th:if="${order.cancelReason != null and !#strings.isEmpty(order.cancelReason)}">
+                    취소 사유
+                </dt>
+                <dd class="col-sm-9 text-danger"
+                    th:if="${order.cancelReason != null and !#strings.isEmpty(order.cancelReason)}"
+                    th:text="${order.cancelReason}"></dd>
+            </dl>
+
+            <!-- 상태별 동작 버튼 -->
+            <div class="mt-4 pt-3 border-top d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div>
+                    <a th:href="@{/orders}" class="btn btn-outline-secondary">목록으로</a>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <!-- 결제 연동 대비 안내 버튼 (9번 작업 머지 시 결제 진행 버튼으로 교체) -->
+                    <button th:if="${order.status.name() == 'PENDING'}"
+                            type="button"
+                            class="btn btn-success"
+                            disabled
+                            title="결제 기능(9번) 연동 준비 중입니다.">
+                        결제하기 (연동 준비중)
+                    </button>
+
+                    <!-- PENDING 상태일 때 즉시 취소 가능 -->
+                    <form th:if="${order.status.name() == 'PENDING'}"
+                          th:action="@{/orders/{id}/cancel(id=${order.id})}"
+                          method="post"
+                          class="m-0"
+                          onsubmit="return confirm('수량 예약을 취소하시겠습니까? 취소 시 선점된 재고가 즉시 반환됩니다.');">
+                        <button type="submit" class="btn btn-outline-danger">
+                            수량 예약 취소
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script th:if="${order.status.name() == 'PENDING' and order.reservedUntil != null}" th:inline="javascript">
+    (function () {
+        const reservedUntilStr = /*[[${order.reservedUntil}]]*/ null;
+        if (!reservedUntilStr) return;
+
+        const targetTime = new Date(reservedUntilStr).getTime();
+        const timerEl = document.getElementById('countdownTimer');
+        if (!timerEl) return;
+
+        function updateTimer() {
+            const now = new Date().getTime();
+            const diff = targetTime - now;
+
+            if (diff <= 0) {
+                timerEl.textContent = '선점 기한 만료';
+                timerEl.className = 'fs-5 fw-bold text-muted';
+                return;
+            }
+
+            const minutes = Math.floor(diff / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+            timerEl.textContent = String(minutes).padStart(2, '0') + ':' + String(seconds).padStart(2, '0');
+        }
+
+        updateTimer();
+        setInterval(updateTimer, 1000);
+    })();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYnnbp8sPUbStPfPzUe4bcfzptbERvPsmvsmP5tFw4G"
+        crossorigin="anonymous"></script>
+</body>
+</html>
+
