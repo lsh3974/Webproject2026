@@ -502,6 +502,86 @@ class PaymentFlowTest {
                 .isInstanceOf(ResponseStatusException.class).hasMessageContaining("승인 결과");
     }
 
+    @Autowired
+    PaymentTransactions transactions;
+
+    // 외부 HTTP를 호출하기 직전에 프로세스가 종료된 DB 상태를 재현합니다.
+    private void interruptBeforeApproval() {
+        transactions.begin(fixture.orderId(), fixture.buyerId(), request(prepared.amount()));
+        tx.executeWithoutResult(s -> em.createQuery(
+                        "update Order o set o.paymentRetryAt = :past where o.id = :id")
+                .setParameter("past", LocalDateTime.now().minusMinutes(1))
+                .setParameter("id", fixture.orderId()).executeUpdate());
+    }
+
+    @Test
+    void 승인전_중단되면_서버가_저장된_동일요청으로_복구한다() {
+        interruptBeforeApproval();
+        when(gateway.findByOrderId(prepared.orderRef())).thenThrow(new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE, 404, "NOT_FOUND_PAYMENT"));
+        when(gateway.confirm(any())).thenReturn(receipt("DONE", prepared.amount()));
+
+        var job = new PaymentRecoveryJob(orders, payments);
+        job.recoverPendingPayments();
+        job.recoverPendingPayments();
+
+        verify(gateway, times(1)).confirm(argThat(a ->
+                a.orderRef().equals(prepared.orderRef()) && a.paymentKey().equals(paymentKey)
+                        && a.amount() == prepared.amount()));
+        assertThat(snapshot().status()).isEqualTo(Order.Status.PAID);
+        assertThat(snapshot().currentQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void 이미_승인된_결제를_발견하면_재전송없이_복구한다() {
+        interruptBeforeApproval();
+        when(gateway.findByOrderId(prepared.orderRef())).thenReturn(receipt("DONE", prepared.amount()));
+        payments.recover(fixture.orderId(), fixture.buyerId(), LocalDateTime.now());
+        verify(gateway, never()).confirm(any());
+        assertThat(snapshot().status()).isEqualTo(Order.Status.PAID);
+        assertThat(snapshot().currentQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void 복구승인에서_세션만료가_확정되고_거래도_없으면_수량을_해제한다() {
+        interruptBeforeApproval();
+        when(gateway.findByOrderId(prepared.orderRef())).thenThrow(new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE, 404, "NOT_FOUND_PAYMENT"));
+        when(gateway.confirm(any())).thenThrow(new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE, 404, "NOT_FOUND_PAYMENT_SESSION"));
+        payments.recover(fixture.orderId(), fixture.buyerId(), LocalDateTime.now());
+        assertThat(snapshot().status()).isEqualTo(Order.Status.EXPIRED);
+        assertThat(snapshot().currentQuantity()).isZero();
+    }
+
+    @Test
+    void 서버복구_조회가_불확실하면_승인을_재전송하지_않는다() {
+        interruptBeforeApproval();
+        when(gateway.findByOrderId(prepared.orderRef())).thenThrow(new ResourceAccessException("timeout"));
+        payments.recover(fixture.orderId(), fixture.buyerId(), LocalDateTime.now());
+        verify(gateway, never()).confirm(any());
+        assertThat(snapshot().status()).isEqualTo(Order.Status.PAYMENT_PENDING);
+        assertThat(snapshot().currentQuantity()).isZero();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = User.Status.class, names = {"SUSPENDED", "WITHDRAWN"})
+    void 승인도중_회원상태가_바뀌어도_결과를_한번만_반영한다(User.Status accountStatus) {
+        Fixture other = createFixture();
+        when(gateway.confirm(any())).thenAnswer(invocation -> {
+            tx.executeWithoutResult(s -> em.createQuery("update User u set u.status = :status where u.id in :ids")
+                    .setParameter("status", accountStatus)
+                    .setParameter("ids", java.util.List.of(fixture.buyerId(), other.buyerId())).executeUpdate());
+            return receipt("DONE", prepared.amount());
+        });
+        assertThat(confirm(prepared.amount()).status()).isEqualTo("PAID");
+        assertThat(payments.retry(fixture.orderId(), fixture.buyerId()).status()).isEqualTo("PAID");
+        assertThat(snapshot().currentQuantity()).isEqualTo(2);
+        assertThatThrownBy(() -> payments.prepare(other.orderId(), other.buyerId()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        verify(gateway, times(1)).confirm(any());
+    }
+
     private Result confirm(long amount) {
         return payments.confirm(
                 fixture.orderId(),

@@ -23,6 +23,13 @@ public class Order {
     @Column(name = "payment_rejection_code", length = 100)
     private String paymentRejectionCode;
 
+    @Column(name = "payment_retry_at")
+    private LocalDateTime paymentRetryAt;
+
+    public void deferPaymentRecovery(LocalDateTime now) {
+        paymentRetryAt = now.plusMinutes(1);
+    }
+
     @Version
     @Column(nullable = false)
     private Long version;

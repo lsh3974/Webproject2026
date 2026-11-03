@@ -165,4 +165,18 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("groupPurchaseId") Long groupPurchaseId,
             @Param("now") LocalDateTime now
     );
+
+    interface PendingPayment {
+        Long getOrderId();
+        Long getUserId();
+    }
+
+    @Query("""
+            select o.id as orderId, o.user.id as userId from Order o
+            where o.status = com.siheung.hanbaguni.entity.Order.Status.PAYMENT_PENDING
+              and (o.paymentRetryAt is null or o.paymentRetryAt <= :now)
+            order by o.paymentRetryAt, o.id
+            """)
+    List<PendingPayment> findDuePayments(@Param("now") LocalDateTime now,
+                                         org.springframework.data.domain.Pageable page);
 }

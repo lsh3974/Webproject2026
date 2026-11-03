@@ -1,5 +1,6 @@
 package com.siheung.hanbaguni.payment;
 
+import java.time.LocalDateTime;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
@@ -47,6 +48,10 @@ public class PaymentService {
             return reconcile(attempt);
         }
 
+        return sendConfirmation(attempt);
+    }
+
+    private Result sendConfirmation(Attempt attempt) {
         Receipt receipt;
 
         try {
@@ -93,6 +98,38 @@ public class PaymentService {
         }
 
         return reconcile(attempt);
+    }
+
+    public void recover(Long orderId, Long userId, LocalDateTime now) {
+        Attempt attempt = transactions.claimRecovery(orderId, userId, now);
+        if (attempt == null) {
+            return;
+        }
+        gateway.checkTestKey();
+        // DB에 저장된 주문번호로 먼저 조회합니다. 불일치나 통신 오류에는 승인을 재전송하지 않습니다.
+        Receipt receipt;
+        try {
+            receipt = gateway.findByOrderId(attempt.orderRef());
+        } catch (TossPaymentException exception) {
+            if (!PaymentErrorPolicy.isPaymentNotFound(exception)) {
+                return;
+            }
+            if (attempt.rejectionCode() != null) {
+                transactions.expireRejectedPayment(attempt, exception);
+            } else if (attempt.confirmationAllowed()) {
+                sendConfirmation(attempt);
+            }
+            return;
+        } catch (RestClientException exception) {
+            return;
+        }
+        if (!PaymentTransactions.matches(attempt, receipt)) {
+            return;
+        }
+        if (applyVerifiedReceipt(attempt, receipt) == null && attempt.confirmationAllowed()
+                && ("READY".equals(receipt.status()) || "IN_PROGRESS".equals(receipt.status()))) {
+            sendConfirmation(attempt);
+        }
     }
 
     private Result reconcile(Attempt attempt) {

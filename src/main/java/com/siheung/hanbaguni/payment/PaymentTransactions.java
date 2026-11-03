@@ -83,6 +83,7 @@ public class PaymentTransactions {
 
             order.beginPayment(LocalDateTime.now());
             order.bindPaymentKey(request.paymentKey());
+            order.deferPaymentRecovery(LocalDateTime.now());
 
             confirmationAllowed = true;
 
@@ -120,6 +121,20 @@ public class PaymentTransactions {
         }
 
         return toAttempt(order, userId, false);
+    }
+
+    // 최초 승인 트랜잭션이 끝났고 복구 대기 시간이 지난 주문만 가져옵니다.
+    public Attempt claimRecovery(Long orderId, Long userId, LocalDateTime now) {
+        Order order = lockOwnedOrder(orderId, userId);
+        if (order.getStatus() != Order.Status.PAYMENT_PENDING
+                || (order.getPaymentRetryAt() != null && order.getPaymentRetryAt().isAfter(now))) {
+            return null;
+        }
+        order.deferPaymentRecovery(now);
+        // 오래된 주문은 조회만 허용합니다. 최초 승인과 동일한 멱등키의 유효 범위를 넘겨 재전송하지 않습니다.
+        boolean canReplay = order.getPaymentRejectionCode() == null
+                && order.getCreatedAt().isAfter(now.minusDays(14));
+        return toAttempt(order, userId, canReplay);
     }
 
     // Toss의 승인 완료 결과를 확인한 뒤 결제 완료로 변경합니다.
@@ -297,19 +312,19 @@ public class PaymentTransactions {
             );
         }
 
-        if (order.getUser().getStatus() != User.Status.ACTIVE) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "사용할 수 없는 회원입니다."
-            );
-        }
-
         return order;
     }
 
     // 승인을 시작하기 전에 예약·모집·수량·금액을 확인합니다.
     private void validatePendingOrder(Order order) {
         LocalDateTime now = LocalDateTime.now();
+
+        if (order.getUser().getStatus() != User.Status.ACTIVE) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "사용할 수 없는 회원입니다."
+            );
+        }
 
         if (order.getStatus() != Order.Status.PENDING) {
             throw conflict(
