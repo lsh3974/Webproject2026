@@ -68,15 +68,14 @@ public class RefundTransactions {
     public Attempt startFailedGroupRefund(Long orderId) {
         Order order = lockOrder(orderId);
 
+        if (isRefundStarted(order)) {
+            return toAttempt(order);
+        }
         if (order.getGroupPurchase().getStatus()
                 != GroupPurchase.Status.FAILED) {
             throw conflict(
                     "모집 실패가 확정된 공동구매만 자동 환불할 수 있습니다."
             );
-        }
-
-        if (isRefundStarted(order)) {
-            return toAttempt(order);
         }
 
         return start(

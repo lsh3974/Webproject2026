@@ -17,6 +17,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
+import com.siheung.hanbaguni.entity.GroupPurchase;
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @EntityGraph(attributePaths = {"groupPurchase", "groupPurchase.store", "groupPurchase.product"})
@@ -32,7 +33,19 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT o FROM Order o WHERE o.id = :id")
     Optional<Order> findByIdWithLock(@Param("id") Long id);
 
-    boolean existsByGroupPurchaseId(Long groupPurchaseId);
+    @Query("select case when count(o) > 0 then true else false end from Order o where o.groupPurchase.id = :groupId")
+    boolean existsByGroupPurchaseId(@Param("groupId") Long groupPurchaseId);
+
+    @Query("""
+        select case when count(o) > 0 then true else false end
+        from Order o
+        where o.groupPurchase.id = :groupPurchaseId
+          and o.status = :status
+        """)
+    boolean existsByGroupPurchaseIdAndStatus(
+            @Param("groupPurchaseId") Long groupPurchaseId,
+            @Param("status") Order.Status status
+    );
 
     @Query("""
             SELECT o FROM Order o
@@ -148,4 +161,25 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Long> findGroupIdForRefund(
             @Param("orderId") Long orderId
     );
+
+    @Query("""
+        select o.id
+        from Order o
+        where (o.groupPurchase.status = :groupStatus and o.status = :paid)
+           or o.status = :pendingRefund
+        order by o.id
+        """)
+    List<Long> findRefundCandidateIds(
+            @Param("groupStatus") GroupPurchase.Status groupStatus,
+            @Param("paid") Order.Status paid,
+            @Param("pendingRefund") Order.Status pendingRefund
+    );
+
+    @Query("""
+        select o.id from Order o
+        where o.status = :status and o.groupPurchase.endAt <= :now
+        order by o.id
+        """)
+    List<Long> findDuePaymentIds(@Param("status") Order.Status status,
+                                 @Param("now") LocalDateTime now);
 }

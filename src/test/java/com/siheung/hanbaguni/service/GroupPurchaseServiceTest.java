@@ -170,7 +170,7 @@ class GroupPurchaseServiceTest {
         );
         ReflectionTestUtils.setField(gp, "id", 500L);
 
-        given(groupPurchaseRepository.findById(500L)).willReturn(Optional.of(gp));
+        given(groupPurchaseRepository.findByIdWithLock(500L)).willReturn(Optional.of(gp));
 
         // when
         groupPurchaseService.publishGroupPurchase(storeId, 500L, sellerId);
@@ -264,7 +264,7 @@ class GroupPurchaseServiceTest {
         );
         ReflectionTestUtils.setField(gp, "id", gpId);
 
-        given(groupPurchaseRepository.findById(gpId)).willReturn(Optional.of(gp));
+        given(groupPurchaseRepository.findByIdWithLock(gpId)).willReturn(Optional.of(gp));
         given(orderRepository.existsByGroupPurchaseId(gpId)).willReturn(true);
 
         // when & then
@@ -297,7 +297,7 @@ class GroupPurchaseServiceTest {
         );
         ReflectionTestUtils.setField(gp, "id", gpId);
 
-        given(groupPurchaseRepository.findById(gpId)).willReturn(Optional.of(gp));
+        given(groupPurchaseRepository.findByIdWithLock(gpId)).willReturn(Optional.of(gp));
         given(orderRepository.existsByGroupPurchaseId(gpId)).willReturn(false);
 
         // when

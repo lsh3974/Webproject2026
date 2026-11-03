@@ -182,6 +182,21 @@ public class GroupPurchase {
 
         currentQuantity -= quantity;
     }
+    public boolean failIfDeadlineReached(
+            LocalDateTime now,
+            boolean hasPendingApproval
+    ) {
+        if (status != Status.OPEN || now.isBefore(endAt)) {
+            return false;
+        }
+
+        if (currentQuantity >= targetQuantity || hasPendingApproval) {
+            return false;
+        }
+
+        status = Status.FAILED;
+        return true;
+    }
 
     public enum Status {
         DRAFT, OPEN, SUCCESS, FAILED, CLOSED

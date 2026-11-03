@@ -95,6 +95,14 @@ public class PaymentService {
         return reconcile(attempt);
     }
 
+    public void recoverPending(Long orderId) {
+        Attempt attempt = transactions.pendingForRecovery(orderId);
+        if (attempt != null) {
+            gateway.checkTestKey();
+            reconcile(attempt);
+        }
+    }
+
     private Result reconcile(Attempt attempt) {
         if (attempt.paid()) {
             return paidResult();

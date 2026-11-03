@@ -124,8 +124,16 @@ public class PaymentTransactions {
         return toAttempt(order, userId, false);
     }
 
+    public Attempt pendingForRecovery(Long orderId) {
+        Long groupId = orders.findGroupIdForRefund(orderId).orElseThrow();
+        groups.findByIdWithLock(groupId).orElseThrow();
+        Order order = orders.findPaymentOrderWithLock(orderId).orElseThrow();
+        return order.getStatus() == Order.Status.PAYMENT_PENDING
+                ? toAttempt(order, order.getUserId(), false) : null;
+    }
+
     public Result complete(Attempt attempt, Receipt receipt) {
-        Order order = lockOwnedOrder(
+        Order order = lockOrderForSettlement(
                 attempt.orderId(),
                 attempt.userId()
         );
@@ -172,7 +180,7 @@ public class PaymentTransactions {
 
     // Toss의 결제 객체에서 실패 또는 만료가 확인된 경우입니다.
     public Result fail(Attempt attempt, Receipt receipt) {
-        Order order = lockOwnedOrder(
+        Order order = lockOrderForSettlement(
                 attempt.orderId(),
                 attempt.userId()
         );
@@ -214,7 +222,7 @@ public class PaymentTransactions {
             throw conflict("확정적인 승인 거절 응답이 아닙니다.");
         }
 
-        Order order = lockOwnedOrder(
+        Order order = lockOrderForSettlement(
                 attempt.orderId(),
                 attempt.userId()
         );
@@ -247,7 +255,7 @@ public class PaymentTransactions {
             );
         }
 
-        Order order = lockOwnedOrder(
+        Order order = lockOrderForSettlement(
                 attempt.orderId(),
                 attempt.userId()
         );
@@ -286,6 +294,14 @@ public class PaymentTransactions {
 
     // 모집 → 주문 순서로 잠근 뒤 주문 소유자와 회원 상태를 확인합니다.
     private Order lockOwnedOrder(Long orderId, Long userId) {
+        Order order = lockOrderForSettlement(orderId, userId);
+        if (order.getUser().getStatus() != User.Status.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "사용할 수 없는 회원입니다.");
+        }
+        return order;
+    }
+
+    private Order lockOrderForSettlement(Long orderId, Long userId) {
         Long groupId = orders.findPaymentGroupId(orderId, userId)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
@@ -308,13 +324,6 @@ public class PaymentTransactions {
             throw new ResponseStatusException(
                     HttpStatus.FORBIDDEN,
                     "본인 주문만 결제할 수 있습니다."
-            );
-        }
-
-        if (order.getUser().getStatus() != User.Status.ACTIVE) {
-            throw new ResponseStatusException(
-                    HttpStatus.FORBIDDEN,
-                    "사용할 수 없는 회원입니다."
             );
         }
 

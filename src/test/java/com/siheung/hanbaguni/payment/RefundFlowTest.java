@@ -38,6 +38,12 @@ class RefundFlowTest {
     RefundService refunds;
 
     @Autowired
+    GroupClosingTransactions closing;
+
+    @Autowired
+    GroupClosingJob closingJob;
+
+    @Autowired
     EntityManager em;
 
     @Autowired
@@ -46,11 +52,94 @@ class RefundFlowTest {
     @MockitoBean
     TossPaymentGateway gateway;
 
+    @Autowired
+    com.siheung.hanbaguni.service.GroupPurchaseService sellerGroups;
+
     Fixture fixture;
 
     @BeforeEach
     void setUp() {
         fixture = createFixture();
+    }
+
+    @Test
+    void 마감된_모집의_결제주문은_환불되고_다시_실행해도_중복취소하지_않는다() {
+        LocalDateTime deadline = tx.execute(status ->
+                em.find(GroupPurchase.class, fixture.groupId()).getEndAt()
+        );
+
+        when(gateway.findForRefund(fixture.paymentKey()))
+                .thenReturn(paidReceipt());
+        when(gateway.cancel(any()))
+                .thenReturn(refundedReceipt());
+
+        closingJob.runOnce(deadline);
+
+        tx.executeWithoutResult(status -> {
+            assertThat(em.find(GroupPurchase.class, fixture.groupId()).getStatus())
+                    .isEqualTo(GroupPurchase.Status.FAILED);
+            assertThat(em.find(Order.class, fixture.orderId()).getStatus())
+                    .isEqualTo(Order.Status.REFUNDED);
+        });
+        assertThat(snapshot().currentQuantity()).isZero();
+
+        closingJob.runOnce(deadline.plusMinutes(1));
+
+        verify(gateway, times(1)).cancel(argThat(attempt ->
+                attempt.orderId().equals(fixture.orderId())
+        ));
+    }
+
+    @Test
+    void 마감된_모집은_실패로_저장하고_미결제_예약만_만료한다() {
+        LocalDateTime deadline = tx.execute(status ->
+                em.find(GroupPurchase.class, fixture.groupId()).getEndAt()
+        );
+
+        Long pendingId = tx.execute(status -> {
+            Order pending = new Order(
+                    em.find(User.class, fixture.buyerId()),
+                    em.find(GroupPurchase.class, fixture.groupId()),
+                    1, 1000, 1000, deadline
+            );
+            em.persist(pending);
+            em.flush();
+            return pending.getId();
+        });
+
+        assertThat(closing.closeIfDue(fixture.groupId(), deadline)).isTrue();
+        assertThat(closing.closeIfDue(fixture.groupId(), deadline)).isFalse();
+
+        tx.executeWithoutResult(status -> {
+            assertThat(em.find(GroupPurchase.class, fixture.groupId()).getStatus())
+                    .isEqualTo(GroupPurchase.Status.FAILED);
+            assertThat(em.find(Order.class, pendingId).getStatus())
+                    .isEqualTo(Order.Status.EXPIRED);
+            assertThat(em.find(Order.class, fixture.orderId()).getStatus())
+                    .isEqualTo(Order.Status.PAID);
+        });
+    }
+
+    @Test
+    void 승인중인_주문이_DB에_있으면_마감을_보류한다() {
+        LocalDateTime deadline = tx.execute(status -> {
+            GroupPurchase group = em.find(GroupPurchase.class, fixture.groupId());
+            Order approving = new Order(
+                    em.find(User.class, fixture.buyerId()),
+                    group, 1, 1000, 1000, group.getEndAt()
+            );
+            approving.assignPaymentOrderRef(UUID.randomUUID().toString());
+            approving.beginPayment(group.getEndAt().minusMinutes(1));
+            em.persist(approving);
+            return group.getEndAt();
+        });
+
+        assertThat(closing.closeIfDue(fixture.groupId(), deadline)).isFalse();
+
+        tx.executeWithoutResult(status ->
+                assertThat(em.find(GroupPurchase.class, fixture.groupId()).getStatus())
+                        .isEqualTo(GroupPurchase.Status.OPEN)
+        );
     }
 
     @Test
@@ -331,6 +420,63 @@ class RefundFlowTest {
         assertThat(snapshot().currentQuantity()).isZero();
         assertThat(snapshot().reason())
                 .isEqualTo("공동구매 목표 수량 미달로 인한 전액 환불");
+    }
+
+    @Test
+    void 주문이_있는_모집은_판매자가_마감하거나_목표를_바꿀_수_없다() {
+        Long storeId = tx.execute(s -> em.find(GroupPurchase.class, fixture.groupId()).getStore().getId());
+        var form = tx.execute(s -> com.siheung.hanbaguni.dto.GroupPurchaseForm.from(
+                em.find(GroupPurchase.class, fixture.groupId())));
+        form.setTargetQuantity(2);
+        assertThatThrownBy(() -> sellerGroups.updateStatus(storeId, fixture.groupId(),
+                fixture.otherUserId(), GroupPurchase.Status.CLOSED))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("409");
+        assertThatThrownBy(() -> sellerGroups.updateGroupPurchase(storeId, fixture.groupId(),
+                fixture.otherUserId(), form)).isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("409");
+    }
+
+    @Test
+    void 마감때_기존_승인을_조회해_목표에_도달하면_성공한다() {
+        String ref = UUID.randomUUID().toString();
+        String key = "test-" + ref;
+        LocalDateTime deadline = tx.execute(s -> {
+            GroupPurchase group = em.find(GroupPurchase.class, fixture.groupId());
+            Order order = new Order(em.find(User.class, fixture.buyerId()), group,
+                    3, 1000, 3000, group.getEndAt());
+            order.assignPaymentOrderRef(ref);
+            order.beginPayment(group.getEndAt().minusMinutes(1));
+            order.bindPaymentKey(key);
+            em.persist(order);
+            return group.getEndAt();
+        });
+        closingJob.runOnce(deadline);
+        tx.executeWithoutResult(s -> assertThat(em.find(GroupPurchase.class, fixture.groupId()).getStatus())
+                .isEqualTo(GroupPurchase.Status.OPEN));
+        when(gateway.find(key)).thenReturn(new PaymentData.Receipt(key, ref, 3000, "KRW", "DONE"));
+        closingJob.runOnce(deadline);
+        tx.executeWithoutResult(s -> assertThat(em.find(GroupPurchase.class, fixture.groupId()).getStatus())
+                .isEqualTo(GroupPurchase.Status.SUCCESS));
+        verify(gateway, never()).confirm(any());
+    }
+
+    @Test
+    void 이미_접수한_고객환불은_모집성공_이후에도_자동복구한다() {
+        when(gateway.findForRefund(fixture.paymentKey()))
+                .thenThrow(new ResourceAccessException("timeout")).thenReturn(refundedReceipt());
+        refunds.cancelMyOrder(fixture.orderId(), fixture.buyerId(), "고객 취소");
+        String originalId = snapshot().refundRequestId();
+        tx.executeWithoutResult(s -> {
+            GroupPurchase group = em.find(GroupPurchase.class, fixture.groupId());
+            group.addPaidQuantity(group.getTargetQuantity());
+            group.succeedIfTargetReached();
+        });
+        closingJob.runOnce(LocalDateTime.now());
+        assertThat(snapshot().status()).isEqualTo(Order.Status.REFUNDED);
+        assertThat(snapshot().refundRequestId()).isEqualTo(originalId);
+        assertThat(snapshot().currentQuantity()).isEqualTo(5);
+        verify(gateway, never()).cancel(argThat(a -> a.orderId().equals(fixture.orderId())));
     }
 
     private Receipt paidReceipt() {

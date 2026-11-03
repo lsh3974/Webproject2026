@@ -141,9 +141,8 @@ public class SellerGroupPurchaseController {
             RedirectAttributes redirectAttributes) {
 
         Store store = storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
-        GroupPurchase gp = groupPurchaseService.getWithStoreAndOwnershipCheck(storeId, id, loginUser.getUserId());
-
         if (bindingResult.hasErrors()) {
+            GroupPurchase gp = groupPurchaseService.getWithStoreAndOwnershipCheck(storeId, id, loginUser.getUserId());
             List<Product> products = productService.findProductsByStoreId(storeId);
             model.addAttribute("store", store);
             model.addAttribute("groupPurchase", gp);
