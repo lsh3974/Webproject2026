@@ -23,6 +23,9 @@ public class Order {
     @Column(name = "payment_rejection_code", length = 100)
     private String paymentRejectionCode;
 
+    @Column(name = "refund_request_id", length = 64, unique = true)
+    private String refundRequestId;
+
     @Version
     @Column(nullable = false)
     private Long version;
@@ -193,10 +196,91 @@ public class Order {
         this.paymentRejectionCode = code;
     }
 
+    public void expireForGroupSuccess() {
+        if (status != Status.PENDING) {
+            throw new IllegalStateException(
+                    "승인을 시작하지 않은 예약만 모집 성공으로 만료할 수 있습니다."
+            );
+        }
+
+        status = Status.EXPIRED;
+        cancelReason = "공동구매 목표 달성으로 모집이 종료되었습니다.";
+    }
+
+    public boolean beginRefund(String requestId, String reason) {
+        if (requestId == null
+                || requestId.isBlank()
+                || requestId.length() > 64) {
+            throw new IllegalArgumentException(
+                    "올바른 환불 요청 번호가 필요합니다."
+            );
+        }
+
+        if (reason == null
+                || reason.isBlank()
+                || reason.strip().length() > 200) {
+            throw new IllegalArgumentException(
+                    "환불 사유를 1~200자로 입력해주세요."
+            );
+        }
+
+        if (status == Status.REFUND_PENDING
+                || status == Status.REFUNDED) {
+            if (!requestId.equals(refundRequestId)) {
+                throw new IllegalStateException(
+                        "이미 다른 환불 요청이 등록되어 있습니다."
+                );
+            }
+
+            return false;
+        }
+
+        if (status != Status.PAID) {
+            throw new IllegalStateException(
+                    "결제 완료 주문만 환불을 시작할 수 있습니다."
+            );
+        }
+
+        if (paymentKey == null || paymentKey.isBlank()) {
+            throw new IllegalStateException(
+                    "환불할 결제 정보가 없습니다."
+            );
+        }
+
+        refundRequestId = requestId;
+        cancelReason = reason.strip();
+        status = Status.REFUND_PENDING;
+
+        return true;
+    }
+
+    public boolean completeRefund(String requestId) {
+        if (requestId == null
+                || !requestId.equals(refundRequestId)) {
+            throw new IllegalStateException(
+                    "환불 요청 번호가 일치하지 않습니다."
+            );
+        }
+
+        if (status == Status.REFUNDED) {
+            return false;
+        }
+
+        if (status != Status.REFUND_PENDING) {
+            throw new IllegalStateException(
+                    "환불 처리 중인 주문만 환불 완료로 변경할 수 있습니다."
+            );
+        }
+
+        status = Status.REFUNDED;
+        return true;
+    }
+
     public enum Status {
         PENDING,
         PAYMENT_PENDING,
         PAID,
+        REFUND_PENDING,
         CANCELLED,
         REFUNDED,
         EXPIRED

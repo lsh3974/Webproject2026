@@ -40,6 +40,12 @@ import java.util.concurrent.TimeUnit;
 class PaymentFlowTest {
 
     @Autowired
+    PaymentTransactions paymentTransactions;
+
+    @Autowired
+    com.siheung.hanbaguni.service.OrderReservationService reservations;
+
+    @Autowired
     PaymentService payments;
 
     @Autowired
@@ -419,6 +425,180 @@ class PaymentFlowTest {
             executor.awaitTermination(5, TimeUnit.SECONDS);
         }
     }
+
+    @Test
+    void 결제완료_수량이_목표미만이면_모집중을_유지한다() {
+        when(gateway.confirm(any()))
+                .thenReturn(receipt("DONE", prepared.amount()));
+
+        Result result = confirm(prepared.amount());
+
+        GroupPurchase.Status groupStatus = tx.execute(status ->
+                em.find(Order.class, fixture.orderId())
+                        .getGroupPurchase()
+                        .getStatus()
+        );
+
+        assertThat(result.status()).isEqualTo("PAID");
+        assertThat(groupStatus).isEqualTo(GroupPurchase.Status.OPEN);
+        assertThat(snapshot().currentQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void 목표달성시_즉시성공하고_대기예약만_만료하며_진행중승인은_완료한다() {
+        // 현재 주문은 2개이므로 목표를 2개로 설정합니다.
+        // 같은 모집에 일반 예약 1개와 승인 시작용 예약 1개도 만듭니다.
+        Long[] ids = tx.execute(status -> {
+            Order original = em.find(Order.class, fixture.orderId());
+            Long groupId = original.getGroupPurchaseId();
+
+            em.createQuery("""
+                update GroupPurchase g
+                set g.targetQuantity = :target
+                where g.id = :id
+                """)
+                    .setParameter("target", 2)
+                    .setParameter("id", groupId)
+                    .executeUpdate();
+
+            // JPQL 직접 수정 후 기존 캐시를 비웁니다.
+            em.clear();
+
+            GroupPurchase group = em.find(GroupPurchase.class, groupId);
+            User buyer = em.find(User.class, fixture.buyerId());
+
+            Order waiting = new Order(
+                    buyer,
+                    group,
+                    1,
+                    1000,
+                    1000,
+                    LocalDateTime.now().plusMinutes(15)
+            );
+
+            Order approving = new Order(
+                    buyer,
+                    group,
+                    1,
+                    1000,
+                    1000,
+                    LocalDateTime.now().plusMinutes(15)
+            );
+
+            em.persist(waiting);
+            em.persist(approving);
+            em.flush();
+
+            return new Long[]{
+                    groupId,
+                    waiting.getId(),
+                    approving.getId()
+            };
+        });
+
+        Long groupId = ids[0];
+        Long waitingOrderId = ids[1];
+        Long approvingOrderId = ids[2];
+
+        // 다른 주문이 먼저 승인 처리를 시작한 상황을 만듭니다.
+        Prepared otherPrepared = payments.prepare(
+                approvingOrderId,
+                fixture.buyerId()
+        );
+
+        String otherPaymentKey = "other-payment-" + UUID.randomUUID();
+
+        Attempt started = paymentTransactions.begin(
+                approvingOrderId,
+                fixture.buyerId(),
+                new ConfirmRequest(
+                        otherPaymentKey,
+                        otherPrepared.orderRef(),
+                        (long) otherPrepared.amount()
+                )
+        );
+
+        assertThat(started.confirmationAllowed()).isTrue();
+
+        // 원래 주문 2개의 결제가 먼저 완료되어 목표에 도달합니다.
+        when(gateway.confirm(any()))
+                .thenReturn(receipt("DONE", prepared.amount()));
+
+        Result first = confirm(prepared.amount());
+
+        assertThat(first.status()).isEqualTo("PAID");
+
+        tx.executeWithoutResult(status -> {
+            GroupPurchase group = em.find(GroupPurchase.class, groupId);
+            Order waiting = em.find(Order.class, waitingOrderId);
+            Order approving = em.find(Order.class, approvingOrderId);
+
+            assertThat(group.getStatus())
+                    .isEqualTo(GroupPurchase.Status.SUCCESS);
+
+            assertThat(group.getCurrentQuantity()).isEqualTo(2);
+
+            assertThat(waiting.getStatus())
+                    .isEqualTo(Order.Status.EXPIRED);
+
+            assertThat(waiting.getCancelReason())
+                    .isEqualTo("공동구매 목표 달성으로 모집이 종료되었습니다.");
+
+            assertThat(approving.getStatus())
+                    .isEqualTo(Order.Status.PAYMENT_PENDING);
+        });
+
+        // 성공한 모집에는 새 예약을 만들 수 없어야 합니다.
+        assertThatThrownBy(() -> reservations.reserveOrder(
+                fixture.buyerId(),
+                groupId,
+                1
+        )).isInstanceOf(ResponseStatusException.class);
+
+        // 만료된 일반 예약도 결제를 새로 시작할 수 없어야 합니다.
+        assertThatThrownBy(() -> payments.prepare(
+                waitingOrderId,
+                fixture.buyerId()
+        )).isInstanceOf(ResponseStatusException.class);
+
+        // 이미 승인 중이던 다른 주문은 조회로 결제 완료를 확인합니다.
+        Receipt otherReceipt = new Receipt(
+                otherPaymentKey,
+                otherPrepared.orderRef(),
+                otherPrepared.amount(),
+                "KRW",
+                "DONE"
+        );
+
+        when(gateway.find(otherPaymentKey))
+                .thenReturn(otherReceipt);
+
+        Result recovered = payments.retry(
+                approvingOrderId,
+                fixture.buyerId()
+        );
+
+        assertThat(recovered.status()).isEqualTo("PAID");
+
+        // 같은 결과를 다시 확인해도 수량이 중복 증가하면 안 됩니다.
+        payments.retry(approvingOrderId, fixture.buyerId());
+
+        tx.executeWithoutResult(status -> {
+            GroupPurchase group = em.find(GroupPurchase.class, groupId);
+            Order approving = em.find(Order.class, approvingOrderId);
+
+            assertThat(group.getStatus())
+                    .isEqualTo(GroupPurchase.Status.SUCCESS);
+
+            assertThat(group.getCurrentQuantity()).isEqualTo(3);
+
+            assertThat(approving.getStatus())
+                    .isEqualTo(Order.Status.PAID);
+        });
+
+        verify(gateway, times(1)).confirm(any());
+    }
+
     private Result confirm(long amount) {
         return payments.confirm(
                 fixture.orderId(),

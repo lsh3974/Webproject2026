@@ -127,4 +127,25 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Optional<Order> findPaymentOrderWithLock(
             @Param("orderId") Long orderId
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        select o
+        from Order o
+        where o.groupPurchase.id = :groupPurchaseId
+          and o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
+        order by o.id
+        """)
+    List<Order> findPendingOrdersForGroupWithLock(
+            @Param("groupPurchaseId") Long groupPurchaseId
+    );
+
+    @Query("""
+        select o.groupPurchase.id
+        from Order o
+        where o.id = :orderId
+        """)
+    Optional<Long> findGroupIdForRefund(
+            @Param("orderId") Long orderId
+    );
 }

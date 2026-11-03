@@ -124,7 +124,6 @@ public class PaymentTransactions {
         return toAttempt(order, userId, false);
     }
 
-    // Toss의 승인 완료 결과를 확인한 뒤 결제 완료로 변경합니다.
     public Result complete(Attempt attempt, Receipt receipt) {
         Order order = lockOwnedOrder(
                 attempt.orderId(),
@@ -133,6 +132,7 @@ public class PaymentTransactions {
 
         validateStoredAttempt(order, attempt);
 
+        // 이미 반영된 결제는 수량을 다시 증가시키지 않습니다.
         if (order.getStatus() == Order.Status.PAID) {
             return paidResult();
         }
@@ -150,10 +150,22 @@ public class PaymentTransactions {
             );
         }
 
-        order.markPaid(attempt.paymentKey());
+        GroupPurchase group = order.getGroupPurchase();
 
-        order.getGroupPurchase()
-                .addPaidQuantity(order.getQuantity());
+        // 결제 완료와 모집 수량 반영
+        order.markPaid(attempt.paymentKey());
+        group.addPaidQuantity(order.getQuantity());
+
+        // 목표에 도달한 순간 모집 성공으로 전환합니다.
+        boolean becameSuccessful = group.succeedIfTargetReached();
+
+        if (becameSuccessful) {
+            // 아직 승인 처리를 시작하지 않은 예약만 만료시킵니다.
+            for (Order pendingOrder :
+                    orders.findPendingOrdersForGroupWithLock(group.getId())) {
+                pendingOrder.expireForGroupSuccess();
+            }
+        }
 
         return paidResult();
     }

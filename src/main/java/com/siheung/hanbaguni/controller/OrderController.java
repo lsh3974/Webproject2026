@@ -118,10 +118,23 @@ public class OrderController {
     public String viewOrderDetail(
             @PathVariable Long orderId,
             @AuthenticationPrincipal LoginUser loginUser,
-            Model model) {
+            Model model
+    ) {
+        Order order = orderReservationService.getOrderWithOwnershipCheck(
+                orderId,
+                loginUser.getUserId()
+        );
 
-        Order order = orderReservationService.getOrderWithOwnershipCheck(orderId, loginUser.getUserId());
+        boolean canRequestRefund =
+                order.getStatus() == Order.Status.PAID
+                        && order.getGroupPurchase().getStatus()
+                        == com.siheung.hanbaguni.entity.GroupPurchase.Status.OPEN
+                        && java.time.LocalDateTime.now()
+                        .isBefore(order.getGroupPurchase().getEndAt());
+
         model.addAttribute("order", order);
+        model.addAttribute("canRequestRefund", canRequestRefund);
+
         return "order/detail";
     }
 
