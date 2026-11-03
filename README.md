@@ -501,6 +501,12 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - **비관적 쓰기 락(PESSIMISTIC_WRITE) 기반 동시성 제어**:
   - 다수의 사용자가 동시에 마지막 남은 재고를 주문하더라도 `GroupPurchase` 행 락을 획득하여 **초과 예약(Overselling)을 원천 차단**합니다.
   - 예약 취소 시에도 `Order` 행 락을 획득하여 취소 처리와 결제 완료 처리의 동시 충돌을 방지합니다.
+  - 공동구매 삭제 시에도 동일한 행 락을 획득하여 주문 존재 여부 확인과 삭제가 원자적(Atomic)으로 처리되도록 보장합니다.
+- **판매자 공동구매 조건 변경 시 기존 유효 예약 보호 정책**:
+  - 최대 모집 수량(`max_quantity`): 현재 점유(확정 + 결제 대기)된 수량 미만으로 축소할 수 없습니다.
+  - 1인당 구매 제한(`limit_per_user`): 기존 주문자의 보유 수량 미만으로 제한을 낮출 수 없습니다.
+  - 마감 일시(`end_at`): 결제 대기 중인 유효 예약의 만료 일시보다 이른 시각으로 앞당길 수 없습니다.
+  - 모집 상태(`status`): 예약/주문 이력이 존재하는 공구는 초안(`DRAFT`)으로 되돌릴 수 없으며, 결제 대기 중인 예약이 있는 동안은 임의 마감(`CLOSED`)을 차단합니다.
 - **실시간 재고 선점 및 타임아웃 만료(15분 Hold)**:
   - 주문 생성 시 기본 15분(`RESERVATION_HOLD_MINUTES`) 동안 수량을 선점하며 상태는 `PENDING`이 됩니다.
   - 공동구매 마감 시각(`endAt`)이 15분 미만으로 남은 경우 선점 기한(`reservedUntil`)을 마감 시각으로 제한합니다.
@@ -514,6 +520,14 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - **가독성 최적화**:
   - 상품 단위(`unit`)가 `"30개"`, `"10개"` 등 숫자가 포함된 경우 화면에 숫자가 겹쳐 보이던 문제를 개선하여, 상단 상품명에만 단위를 명시하고 수량 영역은 순수 숫자만 깔끔하게 출력합니다.
 - **DB 스키마 추가**: `database/005-create-orders.sql` (주문 테이블 생성)
+
+### 테스트 및 동시성 검증
+
+- **멀티스레드 병렬 동시성 테스트 (`OrderReservationConcurrencyTest`)**:
+  - 마지막 재고 1개에 대해 10개 스레드가 동시 예약 경쟁 시 정확히 1건만 성공하고 9건은 거절(`409 CONFLICT`), 초과 예약 0건 검증.
+  - 동일 주문에 대해 5개 스레드가 동시 취소 경쟁 시 정확히 1번만 취소 성공하고 중복 취소 차단 검증.
+  - 공동구매 삭제와 예약 생성 간의 동시 경합 시 행 락을 통해 상호 배타적 원자성 및 외래키 무결성 보장 검증.
+- **단위 및 통합 테스트**: `GroupPurchaseServiceTest` (공구 수정/삭제 정책 12개 테스트), `OrderReservationServiceTest` (수량/예약 비즈니스 로직 10개 테스트), `OrderIntegrationTest` (컨트롤러/API 7개 테스트) 등 **총 52개 테스트 전원 통과**.
 
 ## 9번: 선결제
 
