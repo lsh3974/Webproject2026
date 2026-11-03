@@ -5,6 +5,9 @@ import com.siheung.hanbaguni.entity.Order;
 import com.siheung.hanbaguni.entity.Product;
 import com.siheung.hanbaguni.entity.Store;
 import com.siheung.hanbaguni.entity.User;
+import com.siheung.hanbaguni.dto.GroupPurchaseForm;
+import com.siheung.hanbaguni.repository.OrderRepository;
+import com.siheung.hanbaguni.service.GroupPurchaseService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -419,6 +422,86 @@ class PaymentFlowTest {
             executor.awaitTermination(5, TimeUnit.SECONDS);
         }
     }
+    @Autowired
+    OrderRepository orders;
+
+    @Autowired
+    GroupPurchaseService sellerGroups;
+
+    @Test
+    void 최초_준비만_유예하고_반복준비로_기한을_연장하지_않는다() {
+        Fixture fresh = createFixture();
+        LocalDateTime before = LocalDateTime.now();
+        tx.executeWithoutResult(s -> em.createQuery(
+                "update Order o set o.reservedUntil = :time where o.id = :id")
+                .setParameter("time", before.plusMinutes(1)).setParameter("id", fresh.orderId()).executeUpdate());
+        Prepared first = payments.prepare(fresh.orderId(), fresh.buyerId());
+        LocalDateTime until = tx.execute(s -> em.find(Order.class, fresh.orderId()).getReservedUntil());
+        assertThat(until).isBetween(before.plusMinutes(5).minusSeconds(1), LocalDateTime.now().plusMinutes(5).plusSeconds(1));
+        assertThat(payments.prepare(fresh.orderId(), fresh.buyerId()).orderRef()).isEqualTo(first.orderRef());
+        tx.executeWithoutResult(s -> {
+            Order order = em.find(Order.class, fresh.orderId());
+            assertThat(order.getReservedUntil()).isEqualTo(until);
+            Long groupId = order.getGroupPurchaseId();
+            assertThat(orders.sumActivePendingQuantity(groupId, until.minusSeconds(1))).isEqualTo(2);
+            assertThat(orders.sumActivePendingQuantity(groupId, until)).isZero();
+            assertThat(orders.findMaxReservedUntil(groupId, before)).contains(until);
+        });
+    }
+
+    @Test
+    void 원래_기한이_지나도_결제창_유예_안이면_승인한다() {
+        LocalDateTime opened = LocalDateTime.now().minusMinutes(2);
+        Long id = tx.execute(s -> {
+            Order base = em.find(Order.class, fixture.orderId());
+            Order order = new Order(base.getUser(), base.getGroupPurchase(), 1, 1000, 1000, opened.plusMinutes(1));
+            order.prepareCheckout("grace-" + paymentKey, opened);
+            em.persist(order);
+            return order.getId();
+        });
+        String ref = "grace-" + paymentKey;
+        when(gateway.confirm(any())).thenReturn(new Receipt(paymentKey, ref, 1000, "KRW", "DONE"));
+        assertThat(payments.confirm(id, fixture.buyerId(), new ConfirmRequest(paymentKey, ref, 1000L)).status())
+                .isEqualTo("PAID");
+    }
+
+    @Test
+    void 결제창_유예는_공동구매_마감시각을_넘지_않는다() {
+        tx.executeWithoutResult(s -> {
+            Order base = em.find(Order.class, fixture.orderId());
+            GroupPurchase group = base.getGroupPurchase();
+            LocalDateTime opened = group.getEndAt().minusMinutes(2);
+            Order order = new Order(base.getUser(), group, 1, 1000, 1000, opened.plusMinutes(1));
+            order.prepareCheckout("capped", opened);
+            assertThat(order.getReservedUntil()).isEqualTo(group.getEndAt());
+            assertThatThrownBy(() -> order.beginPayment(group.getEndAt())).isInstanceOf(IllegalStateException.class);
+        });
+    }
+
+    @Test
+    void 기한이_지난_승인중_주문도_회원별_수량과_마감단축을_보호한다() {
+        tx.executeWithoutResult(s -> {
+            Order order = em.find(Order.class, fixture.orderId());
+            order.beginPayment(LocalDateTime.now());
+            order.bindPaymentKey(paymentKey);
+            em.flush();
+            em.createQuery("update Order o set o.reservedUntil = :time where o.id = :id")
+                    .setParameter("time", LocalDateTime.now().minusMinutes(1))
+                    .setParameter("id", order.getId()).executeUpdate();
+        });
+        GroupPurchaseForm form = tx.execute(s -> GroupPurchaseForm.from(
+                em.find(Order.class, fixture.orderId()).getGroupPurchase()));
+        Long groupId = tx.execute(s -> em.find(Order.class, fixture.orderId()).getGroupPurchaseId());
+        Long storeId = tx.execute(s -> em.find(GroupPurchase.class, groupId).getStore().getId());
+        form.setLimitPerUser(1);
+        assertThatThrownBy(() -> sellerGroups.updateGroupPurchase(storeId, groupId, fixture.sellerId(), form))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("1인당");
+        form.setLimitPerUser(10);
+        form.setEndAt(form.getEndAt().minusMinutes(1));
+        assertThatThrownBy(() -> sellerGroups.updateGroupPurchase(storeId, groupId, fixture.sellerId(), form))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("승인 결과");
+    }
+
     private Result confirm(long amount) {
         return payments.confirm(
                 fixture.orderId(),

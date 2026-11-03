@@ -146,6 +146,25 @@ public class Order {
     }
 
 
+    // 결제창을 다시 열어도 최초 유예 종료 시각을 유지한다.
+    public void prepareCheckout(String ref, LocalDateTime now) {
+        if (status != Status.PENDING || reservedUntil == null || !reservedUntil.isAfter(now)
+                || !groupPurchase.getEndAt().isAfter(now)) {
+            throw new IllegalStateException("예약 또는 모집 시간이 만료되었습니다.");
+        }
+        if (paymentOrderRef != null) {
+            return;
+        }
+        LocalDateTime checkoutUntil = now.plusMinutes(5);
+        if (checkoutUntil.isAfter(groupPurchase.getEndAt())) {
+            checkoutUntil = groupPurchase.getEndAt();
+        }
+        if (checkoutUntil.isAfter(reservedUntil)) {
+            reservedUntil = checkoutUntil;
+        }
+        assignPaymentOrderRef(ref);
+    }
+
     public void assignPaymentOrderRef(String paymentOrderRef) {
         if (this.paymentOrderRef == null) {
             this.paymentOrderRef = paymentOrderRef;

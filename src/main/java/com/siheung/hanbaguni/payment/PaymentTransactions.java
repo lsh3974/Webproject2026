@@ -40,9 +40,7 @@ public class PaymentTransactions {
 
         validatePendingOrder(order);
 
-        order.assignPaymentOrderRef(
-                UUID.randomUUID().toString()
-        );
+        order.prepareCheckout(UUID.randomUUID().toString(), LocalDateTime.now());
 
         return new Prepared(
                 order.getId(),

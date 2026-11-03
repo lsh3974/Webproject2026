@@ -135,6 +135,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             WHERE o.groupPurchase.id = :groupPurchaseId
               AND (
                     o.status = com.siheung.hanbaguni.entity.Order.Status.PAID
+                    OR o.status = com.siheung.hanbaguni.entity.Order.Status.PAYMENT_PENDING
                     OR (
                         o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
                         AND (o.reservedUntil IS NULL OR o.reservedUntil > :now)
@@ -146,6 +147,12 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("groupPurchaseId") Long groupPurchaseId,
             @Param("now") LocalDateTime now
     );
+
+    @Query("""
+            select case when count(o) > 0 then true else false end from Order o
+            where o.groupPurchase.id = :groupId and o.status = :status
+            """)
+    boolean hasOrdersInStatus(@Param("groupId") Long groupId, @Param("status") Order.Status status);
 
     @Query("""
             SELECT MAX(o.reservedUntil)

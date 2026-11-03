@@ -183,6 +183,11 @@ public class GroupPurchaseService {
 
         // 3. 마감 일시(endAt) 변경 시 유효 예약 보호:
         // 결제 대기 중인 유효 예약의 만료 일시보다 이른 시각으로 마감 일시를 앞당길 수 없음
+        if (form.getEndAt().isBefore(gp.getEndAt())
+                && orderRepository.hasOrdersInStatus(gp.getId(), Order.Status.PAYMENT_PENDING)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "결제 승인 결과를 확인 중인 주문이 있어 마감 시간을 앞당길 수 없습니다.");
+        }
         if (pendingQty > 0) {
             orderRepository.findMaxReservedUntil(gp.getId(), now).ifPresent(maxReservedUntil -> {
                 if (form.getEndAt().isBefore(maxReservedUntil)) {
