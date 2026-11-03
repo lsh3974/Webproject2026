@@ -17,6 +17,23 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "payment_order_ref", length = 64, unique = true)
+    private String paymentOrderRef;
+
+    @Column(name = "payment_rejection_code", length = 100)
+    private String paymentRejectionCode;
+
+    @Column(name = "payment_retry_at")
+    private LocalDateTime paymentRetryAt;
+
+    public void deferPaymentRecovery(LocalDateTime now) {
+        paymentRetryAt = now.plusMinutes(1);
+    }
+
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
@@ -108,15 +125,103 @@ public class Order {
         }
     }
 
-    public void markPaid(String paymentKey) {
-        this.status = Status.PAID;
-        if (paymentKey != null && !paymentKey.isBlank()) {
-            this.paymentKey = paymentKey.trim();
+    public void beginPayment(LocalDateTime now) {
+        if (this.status != Status.PENDING) {
+            throw new IllegalStateException(
+                    "결제 대기 상태의 주문만 승인을 시작할 수 있습니다."
+            );
         }
+
+        if (this.reservedUntil == null || isExpiredAt(now)) {
+            throw new IllegalStateException(
+                    "예약 시간이 만료되어 결제를 진행할 수 없습니다."
+            );
+        }
+
+        this.status = Status.PAYMENT_PENDING;
+    }
+
+    public void markPaid(String paymentKey) {
+        if (status != Status.PAYMENT_PENDING) {
+            throw new IllegalStateException(
+                    "승인 중인 주문만 결제 완료 처리할 수 있습니다."
+            );
+        }
+
+        bindPaymentKey(paymentKey);
+        status = Status.PAID;
+    }
+
+
+    // 결제창을 다시 열어도 최초 유예 종료 시각을 유지한다.
+    public void prepareCheckout(String ref, LocalDateTime now) {
+        if (status != Status.PENDING || reservedUntil == null || !reservedUntil.isAfter(now)
+                || !groupPurchase.getEndAt().isAfter(now)) {
+            throw new IllegalStateException("예약 또는 모집 시간이 만료되었습니다.");
+        }
+        if (paymentOrderRef != null) {
+            return;
+        }
+        LocalDateTime checkoutUntil = now.plusMinutes(5);
+        if (checkoutUntil.isAfter(groupPurchase.getEndAt())) {
+            checkoutUntil = groupPurchase.getEndAt();
+        }
+        if (checkoutUntil.isAfter(reservedUntil)) {
+            reservedUntil = checkoutUntil;
+        }
+        assignPaymentOrderRef(ref);
+    }
+
+    public void assignPaymentOrderRef(String paymentOrderRef) {
+        if (this.paymentOrderRef == null) {
+            this.paymentOrderRef = paymentOrderRef;
+        }
+    }
+
+    public void bindPaymentKey(String paymentKey) {
+        if (paymentKey == null || paymentKey.isBlank()) {
+            throw new IllegalArgumentException("결제 키가 필요합니다.");
+        }
+
+        if (this.paymentKey != null
+                && !this.paymentKey.equals(paymentKey)) {
+            throw new IllegalStateException(
+                    "이미 다른 결제 요청이 진행 중입니다."
+            );
+        }
+
+        this.paymentKey = paymentKey;
+    }
+
+    public void failPayment() {
+        if (status != Status.PAYMENT_PENDING) {
+            throw new IllegalStateException(
+                    "승인 중인 주문만 결제 실패 처리할 수 있습니다."
+            );
+        }
+
+        status = Status.EXPIRED;
+        cancelReason = "결제 승인 실패 또는 결제 유효 시간 만료";
+    }
+    public void recordPaymentRejection(String code) {
+        if (status != Status.PAYMENT_PENDING) {
+            throw new IllegalStateException(
+                    "결제 승인 확인 중인 주문에만 오류를 기록할 수 있습니다."
+            );
+        }
+
+        if (code == null || code.isBlank() || code.length() > 100) {
+            throw new IllegalArgumentException(
+                    "올바른 결제 오류 코드가 필요합니다."
+            );
+        }
+
+        this.paymentRejectionCode = code;
     }
 
     public enum Status {
         PENDING,
+        PAYMENT_PENDING,
         PAID,
         CANCELLED,
         REFUNDED,
