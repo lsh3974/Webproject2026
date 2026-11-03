@@ -5,23 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>내 주문·예약 내역 - 시흥한바구니</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 </head>
-<body class="bg-light">
+<body class="ui-app ui-order ui-order-list">
 
-<nav class="navbar bg-white border-bottom">
-    <div class="container d-flex flex-wrap gap-3">
-        <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
-        <div class="d-flex align-items-center gap-3">
-            <a th:href="@{/group-purchases}" class="text-decoration-none text-secondary">공동구매 둘러보기</a>
-            <a th:href="@{/orders/new}" class="text-decoration-none text-secondary">새 수량 예약</a>
-            <a th:href="@{/}" class="text-decoration-none text-secondary">홈으로</a>
-        </div>
-    </div>
-</nav>
+<div th:replace="~{fragments/ui :: buyerHeader}"></div>
 
-<main class="container py-5">
+<main id="main" class="container ui-main">
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
             <h1 class="h3 fw-bold mb-1">내 주문 · 수량 예약 내역</h1>
@@ -42,7 +32,7 @@
     </div>
 
     <div th:unless="${#lists.isEmpty(orders)}" class="d-grid gap-3">
-        <div class="card border-0 shadow-sm" th:each="order : ${orders}">
+        <div class="card ui-order-card border-0 shadow-sm" th:each="order : ${orders}">
             <div class="card-body p-4">
                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
                     <div>
@@ -59,7 +49,12 @@
                     </div>
                 </div>
 
-                <div class="row align-items-center g-3">
+                <div class="ui-order-product">
+                <div class="ui-order-photo">
+                    <img data-product-image loading="lazy" th:if="${order.groupPurchase.product.imageUrl != null and !#strings.isEmpty(order.groupPurchase.product.imageUrl)}" th:src="@{${order.groupPurchase.product.imageUrl}}" th:alt="${order.groupPurchase.product.name}">
+                    <div class="ui-media-placeholder" th:unless="${order.groupPurchase.product.imageUrl != null and !#strings.isEmpty(order.groupPurchase.product.imageUrl)}">상품 사진 없음</div>
+                </div>
+                <div class="row align-items-center g-3 flex-grow-1">
                     <div class="col-12 col-md-7">
                         <h2 class="h5 fw-bold mb-1">
                             <a th:href="@{/orders/{id}(id=${order.id})}"
@@ -68,7 +63,8 @@
                         </h2>
                         <div class="text-secondary small">
                             <span th:text="${order.groupPurchase.product.name}">상품명</span> ·
-                            예약 수량 <strong th:text="${order.quantity} + ' ' + ${order.groupPurchase.product.unit}">2 개</strong> ·
+                            판매 단위 <span th:text="${order.groupPurchase.product.unit}">1팩</span> ·
+                            예약 수량 <strong th:text="${order.quantity}">2</strong> ·
                             총 금액 <strong class="text-success"
                                           th:text="${#numbers.formatInteger(order.totalPrice, 1, 'COMMA')} + '원'">17,000원</strong>
                         </div>
@@ -94,10 +90,12 @@
                         </form>
                     </div>
                 </div>
+                </div>
             </div>
         </div>
     </div>
 </main>
 
+<div th:replace="~{fragments/ui :: footer}"></div>
 </body>
 </html>

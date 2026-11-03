@@ -448,16 +448,16 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 진행률은 현재/목표 수량이며 화면 막대는 0~100%로 제한한다. 현재 수량 원본은 별도로 표시한다.
 - 잔여 주문 가능 수량, 수량 예약·차감, 주문 생성 및 결제 처리는 하지 않는다.
 - 8번·9번 담당은 예약 수량 저장 위치, `current_quantity`의 의미, 판매 상한 및 성공 시점을 먼저 확정한다.
-- 주문 버튼 대신 현재 조회만 가능한 상태를 명시한다.
+- 8번 병합 후 상세의 예약 버튼은 기존 `/orders/new?groupPurchaseId={id}` 화면으로 연결한다. 예약·결제 정책은 8번 서비스와 해당 문서를 따른다.
 
 ### 로컬 확인
 
-1. 5·6번이 병합된 최신 main을 본인 작업 브랜치에 반영한다.
+1. 8번까지 병합된 최신 main에서 기능 브랜치를 만든다.
 2. 이미 적용하지 않은 경우에만 DB SQL `003-create-stores-and-products.sql`, `004-create-group-purchases.sql`을 순서대로 적용한다.
 3. 별도의 판매자 테스트 계정을 로컬 DB에서 SELLER로 설정하고 재로그인한다.
 4. `/seller/stores`에서 ACTIVE 매장을 만들고, ON_SALE 상품과 현재 진행 중인 OPEN 모집을 만든다.
 5. 검색·필터, 카드의 상세 링크, 빈 결과, 비공개 모집의 상세 404를 확인한다.
-6. 로그아웃 후 두 조회 주소 모두 로그인 페이지로 이동하는지 확인한다.
+6. 로그아웃 후에도 목록·상세가 정상 조회되고, 예약 진입 시에는 로그인이 필요한지 확인한다.
 
 ### 적용 파일
 
@@ -466,7 +466,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - `GroupPurchaseView`: 고객 화면용 데이터. 회원 비밀번호 등 User 엔티티는 전달하지 않는다.
 - 기존 `GroupPurchaseRepository`: Specification 조회와 store/product EntityGraph만 추가한다. 판매자용 기존 메서드는 유지한다.
 - `templates/group-purchases/`: 목록·상세·공통 헤더/푸터.
-- `static/css/group-purchases.css`, `static/images/catalog-hero.webp`: 화면 리소스.
+- `static/css/market.css`, `static/images/ui/`, `templates/fragments/ui.html`: 공통 화면 리소스.
 - `index.html`: 홈에 목록 진입 링크 추가.
 
 ### 수정 사항
@@ -528,3 +528,12 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
   - 동일 주문에 대해 5개 스레드가 동시 취소 경쟁 시 정확히 1번만 취소 성공하고 중복 취소 차단 검증.
   - 공동구매 삭제와 예약 생성 간의 동시 경합 시 행 락을 통해 상호 배타적 원자성 및 외래키 무결성 보장 검증.
 - **단위 및 통합 테스트**: `GroupPurchaseServiceTest` (공구 수정/삭제 정책 12개 테스트), `OrderReservationServiceTest` (수량/예약 비즈니스 로직 10개 테스트), `OrderIntegrationTest` (컨트롤러/API 7개 테스트) 등 **총 52개 테스트 전원 통과**.
+
+## 15. 구매자·판매자·주문 예약 UI 통일
+
+1번 **동네 장터** 디자인(그린·크림)으로 19개 기본 화면을 통일했습니다.
+상품 상세에서 수량 예약과 내 주문으로 이어지며, 8번의 기존 처리 주소·수량 제한·예약 취소를 사용합니다.
+공통 레이아웃과 로컬 Bootstrap, 이미지 대체 표시, 모바일 화면을 적용했습니다.
+운영 Java·DB·권한 설정 변경은 없습니다.
+
+검증 범위, 팀원 작업 기준, 실제 앱 실행 방법과 별도로 발견한 main 삭제 조회 오류는 [UI 작업 문서](docs/MARKET-UI.md)를 확인해 주세요.
