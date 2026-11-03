@@ -1,6 +1,20 @@
 package com.siheung.hanbaguni.payment;
 
+import java.util.Map;
+
 public final class PaymentErrorPolicy {
+
+    private static final Map<String, Integer> REJECTION_STATUS = Map.of(
+            "INVALID_PAYMENT_KEY", 400,
+            "REJECT_CARD_COMPANY", 403,
+            "REJECT_CARD_PAYMENT", 403,
+            "NOT_FOUND_PAYMENT", 404,
+            "NOT_FOUND_PAYMENT_SESSION", 404
+    );
+
+    static boolean isStoredRejection(String code) {
+        return code != null && REJECTION_STATUS.containsKey(code);
+    }
 
     private PaymentErrorPolicy() {
     }
@@ -17,14 +31,8 @@ public final class PaymentErrorPolicy {
             return false;
         }
 
-        int status = exception.getHttpStatus();
         String code = exception.getErrorCode();
-
-        return (status == 400
-                && "INVALID_PAYMENT_KEY".equals(code))
-                || (status == 404
-                && ("NOT_FOUND_PAYMENT".equals(code)
-                || "NOT_FOUND_PAYMENT_SESSION".equals(code)));
+        return isStoredRejection(code) && REJECTION_STATUS.get(code) == exception.getHttpStatus();
     }
 
     /**

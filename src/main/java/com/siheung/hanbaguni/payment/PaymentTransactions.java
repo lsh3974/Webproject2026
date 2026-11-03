@@ -259,14 +259,7 @@ public class PaymentTransactions {
             return paidResult();
         }
 
-        String rejectionCode = order.getPaymentRejectionCode();
-
-        boolean hasRejectionEvidence =
-                "INVALID_PAYMENT_KEY".equals(rejectionCode)
-                        || "NOT_FOUND_PAYMENT".equals(rejectionCode)
-                        || "NOT_FOUND_PAYMENT_SESSION".equals(rejectionCode);
-
-        if (!hasRejectionEvidence) {
+        if (!PaymentErrorPolicy.isStoredRejection(order.getPaymentRejectionCode())) {
             throw conflict(
                     "승인 거절 기록이 없어 주문을 만료시킬 수 없습니다."
             );

@@ -11,6 +11,8 @@ import com.siheung.hanbaguni.service.GroupPurchaseService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -213,12 +215,11 @@ class PaymentFlowTest {
         assertThat(snapshot().currentQuantity()).isZero();
     }
 
-    @Test
-    void 잘못된_키로_승인거절되고_주문번호에도_결제가_없으면_종료한다() {
+    @ParameterizedTest
+    @CsvSource({"400, INVALID_PAYMENT_KEY", "403, REJECT_CARD_COMPANY", "403, REJECT_CARD_PAYMENT"})
+    void 승인거절후_주문번호에도_결제가_없으면_종료한다(int statusCode, String rejectionCode) {
         TossPaymentException rejected = new TossPaymentException(
-                TossPaymentException.Kind.HTTP_RESPONSE,
-                400,
-                "INVALID_PAYMENT_KEY"
+                TossPaymentException.Kind.HTTP_RESPONSE, statusCode, rejectionCode
         );
 
         TossPaymentException notFound = new TossPaymentException(
@@ -239,6 +240,21 @@ class PaymentFlowTest {
         assertThat(snapshot().currentQuantity()).isZero();
 
         verify(gateway, times(1)).confirm(any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"403, FORBIDDEN_REQUEST", "500, REJECT_CARD_COMPANY"})
+    void 확정거절이_아니면_거래없음만으로_만료시키지_않는다(int statusCode, String code) {
+        when(gateway.confirm(any())).thenThrow(new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE, statusCode, code));
+        TossPaymentException missing = new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE, 404, "NOT_FOUND_PAYMENT");
+        when(gateway.find(paymentKey)).thenThrow(missing);
+        when(gateway.findByOrderId(prepared.orderRef())).thenThrow(missing);
+
+        assertThat(confirm(prepared.amount()).status()).isEqualTo("PAYMENT_PENDING");
+        tx.executeWithoutResult(s -> assertThat(em.find(Order.class, fixture.orderId())
+                .getPaymentRejectionCode()).isNull());
     }
 
     @Test
@@ -265,12 +281,11 @@ class PaymentFlowTest {
     }
 
 
-    @Test
-    void 승인거절_기록을_저장한뒤_조회가_실패해도_재확인으로_종료한다() {
+    @ParameterizedTest
+    @CsvSource({"400, INVALID_PAYMENT_KEY", "403, REJECT_CARD_COMPANY", "403, REJECT_CARD_PAYMENT"})
+    void 승인거절_기록을_저장한뒤_조회가_실패해도_재확인으로_종료한다(int statusCode, String rejectionCode) {
         TossPaymentException rejected = new TossPaymentException(
-                TossPaymentException.Kind.HTTP_RESPONSE,
-                400,
-                "INVALID_PAYMENT_KEY"
+                TossPaymentException.Kind.HTTP_RESPONSE, statusCode, rejectionCode
         );
 
         TossPaymentException notFound = new TossPaymentException(
@@ -301,7 +316,7 @@ class PaymentFlowTest {
                         .getPaymentRejectionCode()
         );
 
-        assertThat(savedCode).isEqualTo("INVALID_PAYMENT_KEY");
+        assertThat(savedCode).isEqualTo(rejectionCode);
 
         // 통신이 복구되어 결제 정보 없음을 확인할 수 있게 됨
         doThrow(notFound)
