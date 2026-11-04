@@ -2,6 +2,7 @@ USE hanbaguni;
 
 CREATE TABLE IF NOT EXISTS pickups (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    order_id BIGINT UNSIGNED NULL,
     store_id BIGINT UNSIGNED NOT NULL,
     group_purchase_id BIGINT UNSIGNED NOT NULL,
     user_id BIGINT UNSIGNED NOT NULL,
@@ -19,6 +20,13 @@ CREATE TABLE IF NOT EXISTS pickups (
 
     CONSTRAINT uq_pickups_pickup_code
         UNIQUE (pickup_code),
+
+    CONSTRAINT uq_pickups_order_id
+        UNIQUE (order_id),
+
+    CONSTRAINT fk_pickups_order
+        FOREIGN KEY (order_id) REFERENCES orders (id)
+        ON DELETE SET NULL ON UPDATE CASCADE,
 
     CONSTRAINT fk_pickups_store
         FOREIGN KEY (store_id) REFERENCES stores (id)

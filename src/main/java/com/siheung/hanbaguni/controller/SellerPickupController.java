@@ -14,6 +14,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.time.format.DateTimeFormatter;
@@ -102,9 +103,12 @@ public class SellerPickupController {
             @AuthenticationPrincipal LoginUser loginUser,
             RedirectAttributes redirectAttributes) {
 
+        storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
         try {
             pickupService.markReady(pickupId, loginUser.getUserId());
             redirectAttributes.addFlashAttribute("successMessage", "상품이 [준비완료] 상태로 변경되었습니다.");
+        } catch (ResponseStatusException e) {
+            redirectAttributes.addFlashAttribute("errorMessage", e.getReason());
         } catch (Exception e) {
             redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
         }
@@ -118,9 +122,12 @@ public class SellerPickupController {
             @AuthenticationPrincipal LoginUser loginUser,
             RedirectAttributes redirectAttributes) {
 
+        storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
         try {
             pickupService.markPickedUp(pickupId, loginUser.getUserId());
             redirectAttributes.addFlashAttribute("successMessage", "수령 완료 처리가 완료되었습니다.");
+        } catch (ResponseStatusException e) {
+            redirectAttributes.addFlashAttribute("errorMessage", e.getReason());
         } catch (Exception e) {
             redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
         }
@@ -138,6 +145,8 @@ public class SellerPickupController {
             Pickup p = pickupService.markPickedUpByCode(pickupCode, storeId, loginUser.getUserId());
             redirectAttributes.addFlashAttribute("successMessage",
                     "[" + p.getPickupCode() + "] " + p.getGroupPurchase().getProduct().getName() + " " + p.getQuantity() + "개 수령 완료 처리되었습니다!");
+        } catch (ResponseStatusException e) {
+            redirectAttributes.addFlashAttribute("errorMessage", "수령 처리 실패: " + e.getReason());
         } catch (Exception e) {
             redirectAttributes.addFlashAttribute("errorMessage", "수령 처리 실패: " + e.getMessage());
         }

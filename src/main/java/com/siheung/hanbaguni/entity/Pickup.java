@@ -17,6 +17,10 @@ public class Pickup {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", unique = true)
+    private Order order;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "store_id", nullable = false)
     private Store store;
@@ -62,6 +66,19 @@ public class Pickup {
             Integer quantity,
             String customerName,
             String customerPhone) {
+        this(null, store, groupPurchase, customer, pickupCode, quantity, customerName, customerPhone);
+    }
+
+    public Pickup(
+            Order order,
+            Store store,
+            GroupPurchase groupPurchase,
+            User customer,
+            String pickupCode,
+            Integer quantity,
+            String customerName,
+            String customerPhone) {
+        this.order = order;
         this.store = store;
         this.groupPurchase = groupPurchase;
         this.customer = customer;

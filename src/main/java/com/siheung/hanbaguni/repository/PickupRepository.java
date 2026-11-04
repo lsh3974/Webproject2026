@@ -2,6 +2,8 @@ package com.siheung.hanbaguni.repository;
 
 import com.siheung.hanbaguni.entity.Pickup;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -17,4 +19,11 @@ public interface PickupRepository extends JpaRepository<Pickup, Long> {
     Optional<Pickup> findByPickupCodeAndStoreId(String pickupCode, Long storeId);
 
     boolean existsByPickupCode(String pickupCode);
+
+    Optional<Pickup> findByOrderId(Long orderId);
+
+    boolean existsByOrderId(Long orderId);
+
+    @Query("SELECT p FROM Pickup p WHERE p.order.id = :orderId AND p.customer.id = :userId")
+    Optional<Pickup> findByOrderIdAndCustomerId(@Param("orderId") Long orderId, @Param("userId") Long userId);
 }

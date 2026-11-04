@@ -1,6 +1,7 @@
 package com.siheung.hanbaguni.service;
 
 import com.siheung.hanbaguni.entity.GroupPurchase;
+import com.siheung.hanbaguni.entity.Order;
 import com.siheung.hanbaguni.entity.Pickup;
 import com.siheung.hanbaguni.entity.Store;
 import com.siheung.hanbaguni.entity.User;
@@ -14,6 +15,7 @@ import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @Transactional(readOnly = true)
@@ -51,11 +53,42 @@ public class PickupService {
         return pickup;
     }
 
+    public Optional<Pickup> findByOrderId(Long orderId) {
+        return pickupRepository.findByOrderId(orderId);
+    }
+
+    public Optional<Pickup> findByOrderIdAndCustomerId(Long orderId, Long userId) {
+        return pickupRepository.findByOrderIdAndCustomerId(orderId, userId);
+    }
+
+    @Transactional
+    public Pickup createOrGetPickupForOrder(Order order) {
+        if (order.getStatus() != Order.Status.PAID) {
+            throw new IllegalStateException("결제 완료(PAID) 상태인 주문만 수령증을 발급할 수 있습니다.");
+        }
+
+        return pickupRepository.findByOrderId(order.getId()).orElseGet(() -> {
+            String code = generateUniquePickupCode();
+            Pickup pickup = new Pickup(
+                    order,
+                    order.getGroupPurchase().getStore(),
+                    order.getGroupPurchase(),
+                    order.getUser(),
+                    code,
+                    order.getQuantity(),
+                    order.getUser().getDisplayName(),
+                    null
+            );
+            return pickupRepository.save(pickup);
+        });
+    }
+
     @Transactional
     public void markReady(Long pickupId, Long sellerId) {
         Pickup pickup = getByIdWithOwnershipCheck(pickupId, sellerId);
         try {
             pickup.markReady();
+            pickupRepository.saveAndFlush(pickup);
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
@@ -66,6 +99,7 @@ public class PickupService {
         Pickup pickup = getByIdWithOwnershipCheck(pickupId, sellerId);
         try {
             pickup.markPickedUp();
+            pickupRepository.saveAndFlush(pickup);
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
@@ -76,6 +110,7 @@ public class PickupService {
         Pickup pickup = getByCodeAndStore(pickupCode, storeId, sellerId);
         try {
             pickup.markPickedUp();
+            pickupRepository.saveAndFlush(pickup);
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
@@ -86,6 +121,7 @@ public class PickupService {
     public Pickup createTestPickup(Store store, GroupPurchase groupPurchase, User customer, int quantity, String customerName, String customerPhone) {
         String code = generateUniquePickupCode();
         Pickup pickup = new Pickup(
+                null,
                 store,
                 groupPurchase,
                 customer,

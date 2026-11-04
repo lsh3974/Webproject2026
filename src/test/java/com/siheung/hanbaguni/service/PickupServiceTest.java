@@ -1,6 +1,7 @@
 package com.siheung.hanbaguni.service;
 
 import com.siheung.hanbaguni.entity.GroupPurchase;
+import com.siheung.hanbaguni.entity.Order;
 import com.siheung.hanbaguni.entity.Pickup;
 import com.siheung.hanbaguni.entity.Product;
 import com.siheung.hanbaguni.entity.Store;
@@ -35,6 +36,60 @@ class PickupServiceTest {
 
     @InjectMocks
     private PickupService pickupService;
+
+    @Test
+    @DisplayName("결제 완료(PAID) 주문에 대해 신규 수령증 및 QR 발급 성공")
+    void createOrGetPickupForOrder_success() {
+        // given
+        User customer = new User("customer@test.com", "hash", "구매자1");
+        ReflectionTestUtils.setField(customer, "id", 100L);
+
+        User seller = new User("seller@test.com", "hash", "판매자1");
+        ReflectionTestUtils.setField(seller, "id", 1L);
+
+        Store store = new Store(seller, "시흥마트", "123-45-67890", "031-123-4567", "시흥시", "101호", "소개");
+        ReflectionTestUtils.setField(store, "id", 10L);
+
+        Product product = new Product(store, "사과", "과일", 15000, "1박스", "설명", null);
+        LocalDateTime now = LocalDateTime.now();
+        GroupPurchase gp = new GroupPurchase(store, product, "사과 공구", 12000, 10, 50, 3, now, now.plusDays(3), now.plusDays(4), now.plusDays(5), "안내", "설명", GroupPurchase.Status.OPEN);
+
+        Order order = new Order(customer, gp, 2, 12000, 24000, now.plusMinutes(15));
+        ReflectionTestUtils.setField(order, "id", 500L);
+        ReflectionTestUtils.setField(order, "status", Order.Status.PAID);
+
+        given(pickupRepository.findByOrderId(500L)).willReturn(Optional.empty());
+        given(pickupRepository.existsByPickupCode(any())).willReturn(false);
+        given(pickupRepository.save(any(Pickup.class))).willAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        Pickup created = pickupService.createOrGetPickupForOrder(order);
+
+        // then
+        assertThat(created).isNotNull();
+        assertThat(created.getOrder()).isEqualTo(order);
+        assertThat(created.getPickupCode()).startsWith("PK-");
+        assertThat(created.getQuantity()).isEqualTo(2);
+        assertThat(created.getStatus()).isEqualTo(Pickup.Status.PREPARING);
+    }
+
+    @Test
+    @DisplayName("결제 미완료 주문에 대해 수령증 발급 시도시 예외 발생")
+    void createOrGetPickupForOrder_unpaid_throwsException() {
+        // given
+        User customer = new User("customer@test.com", "hash", "구매자1");
+        Store store = new Store(customer, "시흥마트", "123-45-67890", "031-123-4567", "시흥시", "101호", "소개");
+        Product product = new Product(store, "사과", "과일", 15000, "1박스", "설명", null);
+        LocalDateTime now = LocalDateTime.now();
+        GroupPurchase gp = new GroupPurchase(store, product, "사과 공구", 12000, 10, 50, 3, now, now.plusDays(3), now.plusDays(4), now.plusDays(5), "안내", "설명", GroupPurchase.Status.OPEN);
+
+        Order order = new Order(customer, gp, 2, 12000, 24000, now.plusMinutes(15)); // PENDING 상태
+
+        // when & then
+        assertThatThrownBy(() -> pickupService.createOrGetPickupForOrder(order))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("결제 완료(PAID) 상태인 주문만");
+    }
 
     @Test
     @DisplayName("수령 준비완료(READY) 처리 성공")

@@ -98,6 +98,13 @@ Workbench에서 프로젝트 DB에 연결한 뒤 다음 파일을 순서대로 �
 3. `database/003-create-stores-and-products.sql`: 매장 및 상품 테이블 생성
 4. `database/004-create-group-purchases.sql`: 공동구매 모집 테이블 생성
 5. `database/005-create-orders.sql`: 주문 및 수량 예약 테이블 생성 (8번 기능용)
+6. `database/006-add-payment-pending-status.sql`: 결제 대기 상태 추가 (9번 기능용)
+7. `database/007-add-order-version.sql`: 주문 낙관적 락 버전 컬럼 추가 (9번 기능용)
+8. `database/008-add-payment-order-ref.sql`: Toss 결제 참조 번호 컬럼 추가 (9번 기능용)
+9. `database/009-add-payment-rejection-code.sql`: 결제 거절 코드 컬럼 추가 (9번 기능용)
+10. `database/010-add-refund-pending.sql`: 환불 대기 상태 및 환불 요청 ID 추가 (10번 기능용)
+11. `database/011-add-payment-retry-at.sql`: 결제 승인 재시도 시각 추가 (9·10번 복구용)
+12. `database/012-create-pickups.sql`: 매장 수령 및 QR 수령증 테이블 생성 (11번 기능용)
 
 회원가입 및 매장/상품/공동구매 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
 파일을 GitHub에서 받는 것만으로 DB에 반영되지는 않습니다.
@@ -140,6 +147,7 @@ IntelliJ에서 `HanbaguniApplication`을 실행합니다.
 | 상태 확인 | http://localhost:8080/actuator/health |
 | 내 매장 관리 (판매자) | http://localhost:8080/seller/stores |
 | 새 매장 등록 (판매자) | http://localhost:8080/seller/stores/new |
+| 매장 수령 및 QR 관리 (판매자) | http://localhost:8080/seller/stores/{id}/pickups |
 | 공개 공동구매 둘러보기 | http://localhost:8080/group-purchases |
 | 내 주문 및 수량 예약 목록 | http://localhost:8080/orders |
 | 공동구매 수량 예약 신청 | http://localhost:8080/orders/new |
@@ -646,3 +654,31 @@ POST 요청은 Spring Security의 CSRF 검증을 유지합니다.
 - 판매자 수정·게시·상태 변경·삭제는 모집 잠금을 획득한 뒤 DB의 최신 상태와 수량을 다시 읽어 검증합니다.
 - 목표 달성 직전 판매자가 읽었던 정보로 저장하더라도 성공 상태나 결제 수량을 덮어쓰지 않습니다. 예전 모집 상태로 제출한 수정은 거절될 수 있으므로 화면을 새로고침해 주세요.
 - 마감 시각이 지난 OPEN 모집은 판매자가 마감 일시를 바꿀 수 없습니다. 자동 작업이 원래 마감 시각을 기준으로 성공·실패 판정을 이어갑니다.
+
+
+## 11번 매장 수령 관리 (준비 완료 및 QR 수령)
+
+### 개요 및 주요 흐름
+- **수령증 및 고유 QR 코드 발급**: 결제 완료(PAID)된 주문은 구매자가 주문 상세 페이지(/orders/{id})에서 고유 수령 코드(예: PK-YYYYMMDD-XXXX) 및 QR 코드를 확인할 수 있습니다.
+- **상품 준비 완료(READY)**: 판매자는 매장 수령 관리 페이지(/seller/stores/{storeId}/pickups)에서 대기 중인 주문을 확인하고 [준비완료] 처리할 수 있습니다.
+- **QR 스캔 및 수령 확정(PICKED_UP)**:
+  - 판매자는 내장 웹 카메라 스캐너(html5-qrcode)를 사용해 고객의 수령증 QR 코드를 스캔하거나 수령 코드를 직접 입력/검색합니다.
+  - 고객명, 상품명, 수량 등을 확인하고 [수령 완료]를 확정하면 수령 시각(picked_up_at)이 기록되고 상태가 PICKED_UP으로 변경됩니다.
+- **주문 상세 연동**: 수령 완료 처리가 완료되면 고객의 주문 상세 페이지에서도 즉시 [수령 완료] 배지가 표시됩니다.
+
+### DB 적용
+- database/012-create-pickups.sql을 실행하여 pickups 테이블을 생성합니다. (주문 번호 1:1 유니크 연동)
+
+### 관련 경로
+| 메서드 | 경로 | 기능 |
+|---|---|---|
+| GET | /seller/stores/{storeId}/pickups | 매장 수령 관리 및 QR 스캐너 화면 |
+| GET | /seller/stores/{storeId}/pickups/api/lookup?code={code} | QR 스캔 후 수령증 단건 조회 API |
+| POST | /seller/stores/{storeId}/pickups/{pickupId}/ready | 상품 준비완료 처리 |
+| POST | /seller/stores/{storeId}/pickups/{pickupId}/complete | 수령 완료 처리 (목록에서 확정) |
+| POST | /seller/stores/{storeId}/pickups/scan-complete | QR 스캔/코드 조회 모달에서 수령 완료 확정 |
+| POST | /seller/stores/{storeId}/pickups/mock-create | 수령 테스트 건 생성 (개발 편의용) |
+
+### 검증
+- PickupServiceTest: 고유 수령 코드 생성, PAID 주문 대상 수령증 발급/조회, 매장 소유권 검증 및 준비완료/수령완료 단위 테스트 5개 통과
+- SellerPickupIntegrationTest: 판매자 수령 목록 렌더링, 수령 코드 조회, 준비완료(READY), QR 스캔 수령완료(PICKED_UP), 고객 주문 상세(order/detail) 실시간 상태 연동 종합 통합 테스트 통과

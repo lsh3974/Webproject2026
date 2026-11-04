@@ -3,8 +3,10 @@ package com.siheung.hanbaguni.controller;
 import com.siheung.hanbaguni.dto.GroupPurchaseReservationSummary;
 import com.siheung.hanbaguni.dto.OrderReservationForm;
 import com.siheung.hanbaguni.entity.Order;
+import com.siheung.hanbaguni.entity.Pickup;
 import com.siheung.hanbaguni.security.LoginUser;
 import com.siheung.hanbaguni.service.OrderReservationService;
+import com.siheung.hanbaguni.service.PickupService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,9 +24,13 @@ import java.util.List;
 public class OrderController {
 
     private final OrderReservationService orderReservationService;
+    private final PickupService pickupService;
 
-    public OrderController(OrderReservationService orderReservationService) {
+    public OrderController(
+            OrderReservationService orderReservationService,
+            PickupService pickupService) {
         this.orderReservationService = orderReservationService;
+        this.pickupService = pickupService;
     }
 
     @GetMapping
@@ -132,8 +138,16 @@ public class OrderController {
                         && java.time.LocalDateTime.now()
                         .isBefore(order.getGroupPurchase().getEndAt());
 
+        Pickup pickup = null;
+        if (order.getStatus() == Order.Status.PAID) {
+            pickup = pickupService.createOrGetPickupForOrder(order);
+        } else {
+            pickup = pickupService.findByOrderId(order.getId()).orElse(null);
+        }
+
         model.addAttribute("order", order);
         model.addAttribute("canRequestRefund", canRequestRefund);
+        model.addAttribute("pickup", pickup);
 
         return "order/detail";
     }
