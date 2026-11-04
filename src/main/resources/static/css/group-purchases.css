@@ -1,0 +1,49 @@
+/* 기능 확인용 최소 스타일. 공통 디자인은 이후 통합합니다. */
+* { box-sizing: border-box; }
+body { margin: 0; color: #212529; background: #f8f9fa; font: 16px/1.6 system-ui, "Malgun Gothic", sans-serif; }
+a { color: #146c43; text-underline-offset: 3px; }
+button, input { font: inherit; }
+button { padding: 7px 12px; border: 1px solid #6c757d; border-radius: 4px; background: #fff; cursor: pointer; }
+button.primary { background: #198754; border-color: #198754; color: #fff; }
+input { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid #adb5bd; border-radius: 4px; background: #fff; }
+:focus-visible { outline: 3px solid #0d6efd; outline-offset: 3px; }
+.container { width: min(1140px, 100%); margin: auto; padding: 0 20px; }
+.site-header { background: #fff; border-bottom: 1px solid #dee2e6; }
+.header-inner, .account-nav { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.header-inner { padding-top: 14px; padding-bottom: 14px; }
+.brand { font-weight: 700; font-size: 20px; text-decoration: none; }
+.account-nav { margin-left: auto; font-size: 14px; }
+.account-nav form { margin: 0; }
+.page { padding-top: 24px; padding-bottom: 32px; }
+h1 { font-size: 28px; line-height: 1.4; margin: 0 0 12px; overflow-wrap: anywhere; }
+h2 { font-size: 21px; margin-top: 28px; }
+.search-form { display: flex; flex-wrap: wrap; align-items: end; gap: 14px; padding: 16px; border: 1px solid #dee2e6; background: #fff; }
+.field { flex: 1 1 180px; }
+.field:first-child { flex-grow: 2; }
+.field label { display: block; font-size: 14px; margin-bottom: 5px; }
+.actions { display: flex; align-items: center; gap: 12px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; min-width: 730px; border-collapse: collapse; background: #fff; }
+th, td { padding: 12px; text-align: left; vertical-align: top; border: 1px solid #dee2e6; overflow-wrap: anywhere; }
+th { background: #e9ecef; white-space: nowrap; }
+td:first-child { min-width: 180px; }
+small { color: #495057; }
+.pagination { display: flex; justify-content: center; gap: 22px; margin-top: 22px; }
+.notice { padding: 16px; background: #fff; border: 1px solid #dee2e6; }
+.notice p { margin-top: 0; }
+.details { display: grid; grid-template-columns: 160px minmax(0, 1fr); background: #fff; border: 1px solid #dee2e6; }
+.details dt, .details dd { padding: 10px 14px; margin: 0; border-bottom: 1px solid #dee2e6; overflow-wrap: anywhere; }
+.details dt { background: #e9ecef; font-weight: 600; }
+.multiline { white-space: pre-wrap; overflow-wrap: anywhere; }
+.footer { padding-top: 16px; padding-bottom: 24px; border-top: 1px solid #dee2e6; font-size: 14px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.skip-link { position: absolute; top: -100px; left: 10px; padding: 10px; background: #fff; }
+.skip-link:focus { top: 10px; }
+@media (max-width: 600px) {
+    .container { padding-left: 14px; padding-right: 14px; }
+    .account-nav { margin-left: 0; }
+    .field { flex-basis: 100%; }
+    .details { grid-template-columns: 110px minmax(0, 1fr); }
+    .details dt, .details dd { padding: 8px; }
+    h1 { font-size: 24px; }
+}

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<body>
+<header class="site-header" th:fragment="header">
+    <nav class="container header-inner" aria-label="주 메뉴">
+        <a class="brand" th:href="@{/}">시흥한바구니</a>
+        <a th:href="@{/group-purchases}">공동구매 목록</a>
+        <div class="account-nav">
+            <a sec:authorize="hasRole('SELLER')" th:href="@{/seller/stores}">내 매장 관리</a>
+            <span sec:authorize="isAuthenticated()"><strong th:text="${#authentication.principal.displayName}">회원</strong>님</span>
+            <form sec:authorize="isAuthenticated()" th:action="@{/logout}" method="post">
+                <button type="submit">로그아웃</button>
+            </form>
+            <a sec:authorize="isAnonymous()" th:href="@{/login}">로그인</a>
+        </div>
+    </nav>
+</header>
+<footer class="container footer" th:fragment="footer"><a th:href="@{/}">홈으로</a></footer>
+</body>
+</html>

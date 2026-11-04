@@ -94,16 +94,42 @@ class ProductServiceTest {
     }
 
     @Test
+    @DisplayName("같은 판매자 소유라도 URL 매장 ID와 상품 소속 매장이 불일치하면 404 NOT_FOUND 예외 발생")
+    void getProductWithStoreAndOwnershipCheck_storeMismatch() {
+        // given
+        Long sellerId = 1L;
+        Long storeAId = 10L;
+        Long storeBId = 20L;
+
+        User seller = new User("owner@test.com", "hash", "주인");
+        ReflectionTestUtils.setField(seller, "id", sellerId);
+
+        Store storeB = new Store(seller, "시흥2호점", "123-45-67891", "031-123-4568", "시흥시", "201호", "소개");
+        ReflectionTestUtils.setField(storeB, "id", storeBId);
+
+        Product productInStoreB = new Product(storeB, "사과", "과일", 10000, "1kg", "설명", null);
+        ReflectionTestUtils.setField(productInStoreB, "id", 200L);
+
+        given(productRepository.findById(200L)).willReturn(Optional.of(productInStoreB));
+
+        // when & then
+        assertThatThrownBy(() -> productService.getProductWithStoreAndOwnershipCheck(storeAId, 200L, sellerId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404 NOT_FOUND");
+    }
+
+    @Test
     @DisplayName("상품 정보 수정 성공")
     void updateProduct_success() {
         // given
         Long sellerId = 1L;
+        Long storeId = 10L;
 
         User seller = new User("owner@test.com", "hash", "주인");
         ReflectionTestUtils.setField(seller, "id", sellerId);
 
         Store store = new Store(seller, "시흥마트", "123-45-67890", "031-123-4567", "시흥시", "101호", "소개");
-        ReflectionTestUtils.setField(store, "id", 10L);
+        ReflectionTestUtils.setField(store, "id", storeId);
 
         Product product = new Product(store, "사과", "과일", 10000, "1kg", "설명", null);
         ReflectionTestUtils.setField(product, "id", 200L);
@@ -118,7 +144,7 @@ class ProductServiceTest {
         given(productRepository.findById(200L)).willReturn(Optional.of(product));
 
         // when
-        productService.updateProduct(200L, sellerId, updateForm);
+        productService.updateProduct(storeId, 200L, sellerId, updateForm);
 
         // then
         assertThat(product.getName()).isEqualTo("꿀사과");

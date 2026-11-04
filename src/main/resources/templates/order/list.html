@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org"
+      xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>내 주문·예약 내역 - 시흥한바구니</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+</head>
+<body class="bg-light">
+
+<nav class="navbar bg-white border-bottom">
+    <div class="container d-flex flex-wrap gap-3">
+        <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
+        <div class="d-flex align-items-center gap-3">
+            <a th:href="@{/group-purchases}" class="text-decoration-none text-secondary">공동구매 둘러보기</a>
+            <a th:href="@{/orders/new}" class="text-decoration-none text-secondary">새 수량 예약</a>
+            <a th:href="@{/}" class="text-decoration-none text-secondary">홈으로</a>
+        </div>
+    </div>
+</nav>
+
+<main class="container py-5">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h1 class="h3 fw-bold mb-1">내 주문 · 수량 예약 내역</h1>
+            <p class="text-secondary small mb-0">내가 신청한 공동구매 수량 예약 및 결제 상태를 확인합니다.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a th:href="@{/group-purchases}" class="btn btn-outline-success">공동구매 둘러보기</a>
+            <a th:href="@{/}" class="btn btn-success">홈으로</a>
+        </div>
+    </div>
+
+    <div th:if="${#lists.isEmpty(orders)}" class="card border-0 shadow-sm text-center p-5">
+        <div class="card-body">
+            <p class="text-secondary fs-5 mb-2">아직 예약하거나 주문한 공동구매 내역이 없습니다.</p>
+            <p class="text-muted small mb-4">홈 화면 또는 공동구매 둘러보기에서 진행 중인 공동구매를 선택해 수량을 예약해보세요.</p>
+            <a th:href="@{/group-purchases}" class="btn btn-success">모집 중인 공동구매 보러가기</a>
+        </div>
+    </div>
+
+    <div th:unless="${#lists.isEmpty(orders)}" class="d-grid gap-3">
+        <div class="card border-0 shadow-sm" th:each="order : ${orders}">
+            <div class="card-body p-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                    <div>
+                        <span class="text-muted small me-2" th:text="'주문번호 #' + ${order.id}">#1</span>
+                        <span class="badge bg-light text-dark border"
+                              th:text="${order.groupPurchase.store.name}">매장명</span>
+                    </div>
+                    <div>
+                        <span th:if="${order.status.name() == 'PENDING'}" class="badge bg-warning text-dark">수량 예약중 (결제 대기)</span>
+                        <span th:if="${order.status.name() == 'PAID'}" class="badge bg-success">결제 완료</span>
+                        <span th:if="${order.status.name() == 'CANCELLED'}" class="badge bg-secondary">예약 취소됨</span>
+                        <span th:if="${order.status.name() == 'EXPIRED'}" class="badge bg-danger">예약 기한 만료</span>
+                        <span th:if="${order.status.name() == 'REFUNDED'}" class="badge bg-info text-dark">환불 완료</span>
+                    </div>
+                </div>
+
+                <div class="row align-items-center g-3">
+                    <div class="col-12 col-md-7">
+                        <h2 class="h5 fw-bold mb-1">
+                            <a th:href="@{/orders/{id}(id=${order.id})}"
+                               class="text-decoration-none text-dark"
+                               th:text="${order.groupPurchase.title}">공동구매 제목</a>
+                        </h2>
+                        <div class="text-secondary small">
+                            <span th:text="${order.groupPurchase.product.name}">상품명</span> ·
+                            예약 수량 <strong th:text="${order.quantity} + ' ' + ${order.groupPurchase.product.unit}">2 개</strong> ·
+                            총 금액 <strong class="text-success"
+                                          th:text="${#numbers.formatInteger(order.totalPrice, 1, 'COMMA')} + '원'">17,000원</strong>
+                        </div>
+                        <div th:if="${order.status.name() == 'PENDING' and order.reservedUntil != null}"
+                             class="small text-warning-emphasis mt-1">
+                            결제 기한: <strong th:text="${#temporals.format(order.reservedUntil, 'yyyy-MM-dd HH:mm')}"></strong>까지 수량 선점 유지
+                        </div>
+                        <div th:if="${order.cancelReason != null and !#strings.isEmpty(order.cancelReason)}"
+                             class="small text-muted mt-1"
+                             th:text="'사유: ' + ${order.cancelReason}"></div>
+                    </div>
+
+                    <div class="col-12 col-md-5 d-flex justify-content-md-end gap-2">
+                        <a th:href="@{/orders/{id}(id=${order.id})}" class="btn btn-outline-primary btn-sm">
+                            상세 보기
+                        </a>
+                        <form th:if="${order.status.name() == 'PENDING'}"
+                              th:action="@{/orders/{id}/cancel(id=${order.id})}"
+                              method="post"
+                              class="m-0"
+                              onsubmit="return confirm('예약된 수량을 취소하시겠습니까?');">
+                            <button type="submit" class="btn btn-outline-danger btn-sm">예약 취소</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+</body>
+</html>
