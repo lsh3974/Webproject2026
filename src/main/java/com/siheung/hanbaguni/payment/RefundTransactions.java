@@ -2,9 +2,11 @@ package com.siheung.hanbaguni.payment;
 
 import com.siheung.hanbaguni.entity.GroupPurchase;
 import com.siheung.hanbaguni.entity.Order;
+import com.siheung.hanbaguni.entity.Pickup;
 import com.siheung.hanbaguni.entity.User;
 import com.siheung.hanbaguni.repository.GroupPurchaseRepository;
 import com.siheung.hanbaguni.repository.OrderRepository;
+import com.siheung.hanbaguni.repository.PickupRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -23,13 +25,16 @@ public class RefundTransactions {
 
     private final OrderRepository orders;
     private final GroupPurchaseRepository groups;
+    private final PickupRepository pickups;
 
     public RefundTransactions(
             OrderRepository orders,
-            GroupPurchaseRepository groups
+            GroupPurchaseRepository groups,
+            PickupRepository pickups
     ) {
         this.orders = orders;
         this.groups = groups;
+        this.pickups = pickups;
     }
 
     // 구매자가 모집 중인 본인 주문을 취소합니다.
@@ -50,6 +55,13 @@ public class RefundTransactions {
         if (order.getUser().getStatus() != User.Status.ACTIVE) {
             throw forbidden("사용할 수 없는 회원입니다.");
         }
+
+        // 이미 매장에서 수령 완료된 상품은 환불 불가
+        pickups.findByOrderId(orderId).ifPresent(p -> {
+            if (p.getStatus() == Pickup.Status.PICKED_UP) {
+                throw conflict("이미 매장에서 수령 완료된 상품은 주문을 취소하거나 환불받을 수 없습니다.");
+            }
+        });
 
         GroupPurchase group = order.getGroupPurchase();
 
@@ -124,6 +136,14 @@ public class RefundTransactions {
         }
 
         order.completeRefund(attempt.refundRequestId());
+
+        // 환불 완료 시 수령증 취소
+        pickups.findByOrderId(order.getId()).ifPresent(p -> {
+            if (p.getStatus() != Pickup.Status.PICKED_UP) {
+                p.cancel();
+                pickups.saveAndFlush(p);
+            }
+        });
 
         // 수량은 환불 접수 때 이미 차감했습니다.
         // 여기서 다시 차감하지 않습니다.

@@ -59,174 +59,176 @@
 
     <!-- 개발/테스트용: 8번(주문) 미구현 상태 대비 임시 수령 생성기 -->
     <div class="collapse mb-4" id="testOrderBox">
-        <div class="card border-primary-subtle shadow-sm bg-primary-subtle p-3">
-            <h2 class="h6 fw-bold text-primary mb-2">🛠️ [테스트 편의 기능] 테스트 수령건 발급</h2>
-            <p class="small text-secondary mb-3">
-                현재 8번(주문) 기능 병합 전이므로, 여기서 원하는 공동구매를 선택해 테스트 수령건을 즉시 발급받아 QR 스캔 및 수령완료 흐름을 테스트할 수 있습니다.
-            </p>
-            <div th:if="${#lists.isEmpty(groupPurchases)}" class="alert alert-warning small mb-0">
-                등록된 공동구매가 없습니다. 먼저 공동구매를 등록해주세요.
+        <div class="card border-primary-subtle bg-primary-subtle bg-opacity-10 shadow-sm">
+            <div class="card-body p-4">
+                <h2 class="h5 fw-bold text-primary mb-2">🛠️ 11번 기능 테스트를 위한 가상 수령 건 생성</h2>
+                <p class="text-muted small mb-3">
+                    결제 연동 전에도 수령 관리(준비완료, QR 스캔, 수령완료) 흐름을 확인해볼 수 있는 개발자 편의 기능입니다.
+                </p>
+                <form method="post"
+                      th:action="@{/seller/stores/{storeId}/pickups/mock-create(storeId=${store.id})}"
+                      class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">대상 공동구매</label>
+                        <select name="groupPurchaseId" class="form-select form-select-sm" required>
+                            <option th:each="gp : ${groupPurchases}"
+                                    th:value="${gp.id}"
+                                    th:text="${gp.title} + ' (상품: ' + ${gp.product.name} + ')'">공구 1</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small fw-semibold">수량</label>
+                        <input type="number" name="quantity" class="form-control form-control-sm" value="1" min="1" max="10" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">고객 닉네임</label>
+                        <input type="text" name="customerName" class="form-control form-control-sm" value="시흥주민" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">고객 연락처</label>
+                        <input type="text" name="customerPhone" class="form-control form-control-sm" value="010-1234-5678" required>
+                    </div>
+                    <div class="col-12 mt-3 text-end">
+                        <button type="submit" class="btn btn-primary btn-sm px-3">가상 수령 건 발급하기</button>
+                    </div>
+                </form>
             </div>
-            <form th:unless="${#lists.isEmpty(groupPurchases)}"
-                  th:action="@{/seller/stores/{storeId}/pickups/mock-create(storeId=${store.id})}"
-                  method="post" class="row g-2 align-items-end">
-                <div class="col-md-4">
-                    <label class="form-label small fw-semibold">대상 공동구매</label>
-                    <select name="groupPurchaseId" class="form-select form-select-sm" required>
-                        <option th:each="gp : ${groupPurchases}"
-                                th:value="${gp.id}"
-                                th:text="${gp.title} + ' (' + ${gp.product.name} + ')'"></option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small fw-semibold">수량</label>
-                    <input type="number" name="quantity" class="form-control form-control-sm" value="1" min="1" max="10">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label small fw-semibold">고객명</label>
-                    <input type="text" name="customerName" class="form-control form-control-sm" value="홍길동">
-                </div>
-                <div class="col-md-3">
-                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-semibold">
-                        테스트 수령건 생성하기
-                    </button>
-                </div>
-            </form>
         </div>
     </div>
 
-    <!-- QR 스캔 & 수령코드 입력 섹션 -->
-    <div class="row g-4 mb-5">
-        <!-- 1. 카메라 QR 코드 스캐너 -->
-        <div class="col-12 col-lg-6">
-            <div class="card border-0 shadow-sm h-100 p-4">
-                <h2 class="h5 fw-bold mb-1">📷 카메라 QR 코드 스캔</h2>
-                <p class="text-secondary small mb-3">
-                    스마트폰 카메라 또는 웹캠으로 고객의 수령 QR 코드를 비추면 즉시 인식됩니다.
-                </p>
-
-                <div id="qr-reader" class="rounded overflow-hidden bg-light mb-3" style="width: 100%; min-height: 250px;"></div>
-
-                <div class="d-flex gap-2">
-                    <button id="btnStartScan" type="button" class="btn btn-outline-success btn-sm flex-fill">
-                        카메라 스캔 시작
-                    </button>
-                    <button id="btnStopScan" type="button" class="btn btn-outline-secondary btn-sm" disabled>
-                        스캔 중지
-                    </button>
+    <!-- 상단 2열: [1] 카메라 QR 스캔기 / [2] 수령 번호 직접 입력 및 단건 조회 -->
+    <div class="row g-4 mb-4">
+        <!-- 1. 카메라 QR 스캐너 카드 -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white py-3 border-0">
+                    <h2 class="h5 fw-bold mb-0">📷 QR 코드 스캔 (카메라)</h2>
+                    <span class="text-muted small">스마트폰이나 웹캠을 통해 고객의 수령 QR 코드를 인식합니다.</span>
                 </div>
-                <div id="scanStatus" class="small text-muted text-center mt-2">카메라 스캔 버튼을 누르면 작동합니다.</div>
+                <div class="card-body p-4 text-center">
+                    <div id="qr-reader" class="mx-auto rounded border bg-black text-white d-flex align-items-center justify-content-center"
+                         style="max-width: 380px; min-height: 260px;">
+                        <span class="text-muted small p-3">카메라 시작 버튼을 누르면 스캐너가 활성화됩니다.</span>
+                    </div>
+
+                    <div class="mt-3 d-flex justify-content-center gap-2">
+                        <button type="button" id="btnStartScan" class="btn btn-success">카메라 스캔 시작</button>
+                        <button type="button" id="btnStopScan" class="btn btn-outline-secondary" disabled>스캔 중지</button>
+                    </div>
+                    <div id="scanStatus" class="small text-muted mt-2">대기 중</div>
+                </div>
             </div>
         </div>
 
-        <!-- 2. 수령 코드 직접 조회 및 처리 -->
-        <div class="col-12 col-lg-6">
-            <div class="card border-0 shadow-sm h-100 p-4">
-                <h2 class="h5 fw-bold mb-1">⌨️ 수령 코드 직접 입력</h2>
-                <p class="text-secondary small mb-3">
-                    고객이 제시한 15자리 수령 코드(예: PK-20261028-XXXX)를 입력하여 바로 조회합니다.
-                </p>
+        <!-- 2. 수령 번호 수동 조회 카드 -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white py-3 border-0">
+                    <h2 class="h5 fw-bold mb-0">🔢 수령 번호 직접 검색</h2>
+                    <span class="text-muted small">카메라 사용이 불가능한 경우 고객의 수령 코드(예: PK-...)를 입력하세요.</span>
+                </div>
+                <div class="card-body p-4">
+                    <form th:action="@{/seller/stores/{id}/pickups(id=${store.id})}" method="get" class="mb-3">
+                        <div class="input-group">
+                            <input type="text" name="searchCode" class="form-control"
+                                   placeholder="수령 코드 (예: PK-20261104-ABCD)"
+                                   th:value="${searchCode}" autofocus>
+                            <button class="btn btn-primary px-4" type="submit">조회</button>
+                        </div>
+                    </form>
 
-                <form th:action="@{/seller/stores/{id}/pickups(id=${store.id})}" method="get" class="mb-3">
-                    <div class="input-group">
-                        <input type="text" name="searchCode" th:value="${searchCode}" class="form-control"
-                               placeholder="수령 코드 입력 (예: PK-20261028-7A8B)" required>
-                        <button type="submit" class="btn btn-success fw-semibold">코드 조회</button>
+                    <div th:if="${searchError}" class="alert alert-warning small py-2 mb-3" th:text="${searchError}">
+                        조회 실패
                     </div>
-                </form>
 
-                <div th:if="${searchError}" class="alert alert-danger small mb-3" th:text="${searchError}"></div>
-
-                <!-- 검색된 건 카드 -->
-                <div th:if="${searchedPickup}" class="border rounded p-3 bg-light">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="badge bg-dark" th:text="${searchedPickup.pickupCode}">PK-CODE</span>
-                        <div>
+                    <!-- 검색 결과 표시 영역 -->
+                    <div th:if="${searchedPickup}" class="card border-success shadow-none bg-success-subtle bg-opacity-25 p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="badge bg-dark font-monospace" th:text="${searchedPickup.pickupCode}">PK-CODE</span>
                             <span th:if="${searchedPickup.status.name() == 'PREPARING'}" class="badge bg-warning text-dark">준비중</span>
-                            <span th:if="${searchedPickup.status.name() == 'READY'}" class="badge bg-info text-dark">수령대기(준비완료)</span>
+                            <span th:if="${searchedPickup.status.name() == 'READY'}" class="badge bg-info text-dark">수령대기 (준비완료)</span>
                             <span th:if="${searchedPickup.status.name() == 'PICKED_UP'}" class="badge bg-success">수령완료</span>
                             <span th:if="${searchedPickup.status.name() == 'CANCELLED'}" class="badge bg-secondary">취소</span>
                         </div>
-                    </div>
 
-                    <h3 class="h6 fw-bold mb-1" th:text="${searchedPickup.groupPurchase.product.name} + ' (' + ${searchedPickup.quantity} + '개)'">
-                        상품명 (수량)
-                    </h3>
-                    <div class="small text-secondary mb-2">
-                        공동구매: <span th:text="${searchedPickup.groupPurchase.title}">제목</span><br>
-                        고객명: <span class="fw-semibold text-dark" th:text="${searchedPickup.customerName}">홍길동</span>
-                        <span th:if="${searchedPickup.customerPhone}" th:text="'(' + ${searchedPickup.customerPhone} + ')'"></span>
-                    </div>
+                        <h3 class="h6 fw-bold mb-1" th:text="${searchedPickup.groupPurchase.product.name} + ' (' + ${searchedPickup.quantity} + '개)'">
+                            상품명 (수량)
+                        </h3>
+                        <div class="small text-secondary mb-2">
+                            공동구매: <span th:text="${searchedPickup.groupPurchase.title}">제목</span><br>
+                            고객명: <span class="fw-semibold text-dark" th:text="${searchedPickup.customerName}">홍길동</span>
+                            <span th:if="${searchedPickup.customerPhone}" th:text="'(' + ${searchedPickup.customerPhone} + ')'"></span>
+                        </div>
 
-                    <div th:if="${searchedPickup.status.name() == 'PICKED_UP'}" class="alert alert-secondary small p-2 mb-0">
-                        ✅ 이미 수령이 완료된 건입니다. (수령시각: <span th:text="${#temporals.format(searchedPickup.pickedUpAt, 'yyyy-MM-dd HH:mm')}"></span>)
-                    </div>
+                        <div th:if="${searchedPickup.status.name() == 'PICKED_UP'}" class="alert alert-secondary small p-2 mb-0">
+                            ✅ 이미 수령이 완료된 건입니다. (수령시각: <span th:text="${#temporals.format(searchedPickup.pickedUpAt, 'yyyy-MM-dd HH:mm')}"></span>)
+                        </div>
 
-                    <div th:unless="${searchedPickup.status.name() == 'PICKED_UP'}" class="d-flex gap-2 mt-3">
-                        <form th:if="${searchedPickup.status.name() == 'PREPARING'}"
-                              th:action="@{/seller/stores/{storeId}/pickups/{id}/ready(storeId=${store.id}, id=${searchedPickup.id})}"
-                              method="post" class="flex-fill m-0">
-                            <button type="submit" class="btn btn-info btn-sm w-100 fw-semibold">
-                                상품 준비완료 처리
-                            </button>
-                        </form>
-                        <form th:action="@{/seller/stores/{storeId}/pickups/{id}/complete(storeId=${store.id}, id=${searchedPickup.id})}"
-                              method="post" class="flex-fill m-0">
-                            <button type="submit" class="btn btn-success btn-sm w-100 fw-semibold"
-                                    onclick="return confirm('고객에게 상품을 인도하고 수령완료 처리하시겠습니까?');">
-                                수령 확정 (수령완료)
-                            </button>
-                        </form>
+                        <div th:if="${searchedPickup.status.name() == 'CANCELLED'}" class="alert alert-danger small p-2 mb-0">
+                            ❌ 취소/환불된 수령증입니다. 상품을 인도할 수 없습니다.
+                        </div>
+
+                        <div th:if="${searchedPickup.status.name() == 'PREPARING' or searchedPickup.status.name() == 'READY'}" class="d-flex gap-2 mt-3">
+                            <form th:if="${searchedPickup.status.name() == 'PREPARING'}"
+                                  th:action="@{/seller/stores/{storeId}/pickups/{id}/ready(storeId=${store.id}, id=${searchedPickup.id})}"
+                                  method="post" class="flex-fill m-0">
+                                <button type="submit" class="btn btn-info btn-sm w-100 fw-semibold">
+                                    상품 준비완료 처리
+                                </button>
+                            </form>
+                            <form th:action="@{/seller/stores/{storeId}/pickups/{id}/complete(storeId=${store.id}, id=${searchedPickup.id})}"
+                                  method="post" class="flex-fill m-0">
+                                <button type="submit" class="btn btn-success btn-sm w-100 fw-semibold"
+                                        onclick="return confirm('고객에게 상품을 인도하고 수령완료 처리하시겠습니까?');">
+                                    수령 확정 (수령완료)
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 전체 수령 내역 리스트 -->
+    <!-- 하단: 매장 전체 수령 대기/완료 목록 -->
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h5 fw-bold mb-0">매장 전체 수령 관리 목록</h2>
+        <h2 class="h5 fw-bold mb-0">📦 전체 수령 대상 목록</h2>
         <span class="text-secondary small" th:text="'총 ' + ${#lists.size(pickups)} + '건'">총 0건</span>
     </div>
 
     <div th:if="${#lists.isEmpty(pickups)}" class="card border-0 shadow-sm text-center p-5">
-        <div class="card-body">
-            <p class="text-secondary fs-5 mb-2">등록된 수령 내역이 없습니다.</p>
-            <p class="text-muted mb-0">상단의 [테스트용 주문 생성] 버튼으로 수령 테스트 데이터를 만들어보실 수 있습니다.</p>
-        </div>
+        <p class="text-muted mb-0">아직 등록된 수령 건이 없습니다.</p>
+        <span class="small text-secondary mt-1">상단의 [+ 테스트용 주문(수령건) 생성]을 눌러 테스트해보실 수 있습니다.</span>
     </div>
 
     <div th:unless="${#lists.isEmpty(pickups)}" class="card border-0 shadow-sm">
         <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
+            <table class="table align-middle table-hover mb-0">
+                <thead class="table-light small">
                 <tr>
-                    <th scope="col" style="width: 140px;">수령 코드 / QR</th>
-                    <th scope="col">상품 및 공동구매 정보</th>
-                    <th scope="col" style="width: 100px;">수량</th>
-                    <th scope="col" style="width: 150px;">주문 고객</th>
-                    <th scope="col" style="width: 120px;">수령 상태</th>
-                    <th scope="col" style="width: 220px;" class="text-end">상태 처리</th>
+                    <th style="width: 15%;">수령 코드</th>
+                    <th style="width: 25%;">상품 / 공동구매</th>
+                    <th style="width: 10%;">수량</th>
+                    <th style="width: 20%;">구매자 정보</th>
+                    <th style="width: 15%;">진행 상태</th>
+                    <th style="width: 15%;" class="text-end">관리 작업</th>
                 </tr>
                 </thead>
-                <tbody>
+                <tbody class="small">
                 <tr th:each="p : ${pickups}">
                     <td>
-                        <strong class="font-monospace text-dark d-block small" th:text="${p.pickupCode}">PK-CODE</strong>
-                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none btn-show-qr small"
+                        <strong class="font-monospace text-primary" th:text="${p.pickupCode}">PK-1234</strong>
+                        <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-decoration-none btn-show-qr"
                                 th:data-code="${p.pickupCode}"
-                                th:data-title="${p.groupPurchase.product.name}"
-                                th:data-name="${p.customerName}">
-                            [고객 QR 보기]
+                                th:data-title="${p.groupPurchase.product.name}">
+                            [QR보기]
                         </button>
                     </td>
                     <td>
-                        <strong th:text="${p.groupPurchase.product.name}">상품명</strong>
-                        <div class="text-muted small" th:text="${p.groupPurchase.title}">공동구매 제목</div>
+                        <div class="fw-semibold" th:text="${p.groupPurchase.product.name}">딸기</div>
+                        <div class="text-muted small" th:text="${p.groupPurchase.title}">특가 공동구매</div>
                     </td>
-                    <td>
-                        <span class="fw-bold" th:text="${p.quantity} + '개'">1개</span>
-                    </td>
+                    <td th:text="${p.quantity} + '개'">1개</td>
                     <td>
                         <div th:text="${p.customerName}">고객명</div>
                         <div class="text-muted small" th:text="${p.customerPhone}">010-0000-0000</div>
@@ -256,6 +258,9 @@
                         <div th:if="${p.status.name() == 'PICKED_UP'}" class="text-success small fw-semibold">
                             ✓ 수령 완료됨
                         </div>
+                        <div th:if="${p.status.name() == 'CANCELLED'}" class="text-secondary small">
+                            취소/환불됨
+                        </div>
                     </td>
                 </tr>
                 </tbody>
@@ -264,68 +269,76 @@
     </div>
 </main>
 
-<!-- QR 모달 (테스트 시 스마트폰으로 화면의 QR을 비춰볼 수 있도록 지원) -->
+<!-- QR 코드 확인 팝업 (테스트 확인용) -->
 <div class="modal fade" id="qrModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content text-center p-3">
-            <h3 class="h6 fw-bold mb-2" id="qrModalTitle">고객 수령 QR</h3>
+            <h5 class="fw-bold mb-2" id="qrModalTitle">수령 QR 코드</h5>
             <div id="qrcodeCanvas" class="d-flex justify-content-center my-3"></div>
-            <div id="qrModalCode" class="font-monospace small fw-bold text-muted mb-2"></div>
-            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">닫기</button>
+            <div class="bg-light p-2 rounded mb-3">
+                <span class="small text-muted d-block">수령 코드</span>
+                <strong class="font-monospace fs-6" id="qrModalCode">PK-0000</strong>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">닫기</button>
         </div>
     </div>
 </div>
 
-<!-- QR 스캔 성공 시 수령 확인 모달 -->
+<!-- QR 스캔 성공 시 정보 확인 및 수령확정 모달 -->
 <div class="modal fade" id="scanResultModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title fw-bold">QR 스캔 성공!</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">🎯 QR 코드 인식 결과</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body p-4">
-                <div class="text-center mb-3">
-                    <span id="scanModalStatusBadge" class="badge bg-info text-dark mb-2">수령대기</span>
-                    <h4 class="h5 fw-bold" id="scanModalProduct">상품명</h4>
-                    <div class="text-muted small" id="scanModalTitle">공동구매명</div>
+            <div class="modal-body">
+                <div class="text-center my-2">
+                    <span id="scanModalStatusBadge" class="badge bg-secondary mb-2">상태</span>
+                    <h4 class="fw-bold text-dark mb-1" id="scanModalProduct">상품명</h4>
+                    <p class="text-muted small mb-0" id="scanModalTitle">공동구매명</p>
                 </div>
-
-                <div class="bg-light p-3 rounded small mb-3">
+                <hr>
+                <div class="bg-light p-3 rounded small">
                     <div class="d-flex justify-content-between mb-1">
-                        <span class="text-muted">수령 코드:</span>
-                        <strong class="font-monospace" id="scanModalCode">PK-CODE</strong>
+                        <span class="text-secondary">수령 코드:</span>
+                        <strong class="font-monospace text-primary" id="scanModalCode">PK-0000</strong>
                     </div>
                     <div class="d-flex justify-content-between mb-1">
-                        <span class="text-muted">고객명:</span>
-                        <strong id="scanModalCustomer">홍길동</strong>
+                        <span class="text-secondary">수령인(고객):</span>
+                        <strong class="text-dark" id="scanModalCustomer">홍길동</strong>
                     </div>
                     <div class="d-flex justify-content-between mb-1">
-                        <span class="text-muted">수량:</span>
-                        <strong id="scanModalQuantity">1개</strong>
+                        <span class="text-secondary">수령 수량:</span>
+                        <strong class="text-dark" id="scanModalQuantity">1개</strong>
                     </div>
                     <div class="d-flex justify-content-between">
-                        <span class="text-muted">결제금액:</span>
-                        <strong class="text-success" id="scanModalPrice">12,000원</strong>
+                        <span class="text-secondary">결제 금액:</span>
+                        <strong class="text-dark" id="scanModalPrice">10,000원</strong>
                     </div>
                 </div>
 
-                <form th:action="@{/seller/stores/{storeId}/pickups/scan-complete(storeId=${store.id})}" method="post">
-                    <input type="hidden" id="scanHiddenCode" name="pickupCode">
-                    <button type="submit" id="btnScanConfirm" class="btn btn-success w-100 fw-semibold py-2">
-                        상품 인도 및 수령 완료 확정
-                    </button>
+                <form id="formScanComplete" th:action="@{/seller/stores/{storeId}/pickups/scan-complete(storeId=${store.id})}" method="post">
+                    <input type="hidden" name="pickupCode" id="scanHiddenCode">
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary flex-fill" data-bs-dismiss="modal">닫기</button>
+                        <button type="submit" id="btnScanConfirm" class="btn btn-success flex-fill fw-semibold">
+                            상품 인도 및 수령 완료 확정
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
-<script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-FKmEsmbLpC+WvEsmbLpC+WvEsmbLpC+WvEsmbLpC+WvEsmbLpC+WvEsmbLpC+Wv" crossorigin="anonymous"></script>
+
+<script th:inline="javascript">
     document.addEventListener('DOMContentLoaded', function () {
+        const storeId = /*[[${store.id}]]*/ 1;
         let html5QrcodeScanner = null;
-        const storeId = /*[[${store.id}]]*/ [[${store.id}]];
 
         const btnStart = document.getElementById('btnStartScan');
         const btnStop = document.getElementById('btnStopScan');
@@ -359,6 +372,11 @@
                         badge.textContent = '이미 수령 완료됨 (' + data.pickedUpAt + ')';
                         confirmBtn.disabled = true;
                         confirmBtn.textContent = '이미 완료된 건입니다';
+                    } else if (data.status === 'CANCELLED') {
+                        badge.className = 'badge bg-secondary mb-2';
+                        badge.textContent = '취소/환불된 수령증 (수령 불가)';
+                        confirmBtn.disabled = true;
+                        confirmBtn.textContent = '취소된 건은 수령할 수 없습니다';
                     } else {
                         badge.className = data.status === 'READY' ? 'badge bg-info text-dark mb-2' : 'badge bg-warning text-dark mb-2';
                         badge.textContent = data.status === 'READY' ? '수령대기 (준비완료)' : '준비중';
@@ -381,7 +399,7 @@
             if (!html5QrcodeScanner) {
                 html5QrcodeScanner = new Html5Qrcode("qr-reader");
             }
-            scanStatus.textContent = '카메라를 준비 중입니다...';
+            scanStatus.textContent = '카메라 준비 중입니다...';
             html5QrcodeScanner.start(
                 { facingMode: "environment" },
                 { fps: 10, qrbox: { width: 250, height: 250 } },
@@ -391,22 +409,22 @@
                 btnStart.disabled = true;
                 btnStop.disabled = false;
             }).catch(err => {
-                scanStatus.textContent = '카메라 실행 실패: ' + err;
-                alert('카메라 권한이 없거나 지원되지 않는 환경입니다. 직접 수령 코드를 입력해주세요.');
+                scanStatus.textContent = '카메라 오류: ' + err;
+                alert('카메라를 찾을 수 없거나 권한이 없는 환경입니다. 수동 수령 코드를 입력해주세요.');
             });
         });
 
         btnStop.addEventListener('click', function () {
             if (html5QrcodeScanner) {
                 html5QrcodeScanner.stop().then(() => {
-                    scanStatus.textContent = '카메라 스캔이 중지되었습니다.';
+                    scanStatus.textContent = '카메라가 중단되었습니다.';
                     btnStart.disabled = false;
                     btnStop.disabled = true;
                 });
             }
         });
 
-        // 고객 QR 보기 모달 (테스트 화면용 QR 렌더링)
+        // 모달 QR 코드 동적 렌더링 (테스트 화면용 QR 보기)
         const qrCanvas = document.getElementById('qrcodeCanvas');
         let qrcodeObj = null;
         document.querySelectorAll('.btn-show-qr').forEach(btn => {

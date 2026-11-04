@@ -131,19 +131,20 @@ public class OrderController {
                 loginUser.getUserId()
         );
 
-        boolean canRequestRefund =
-                order.getStatus() == Order.Status.PAID
-                        && order.getGroupPurchase().getStatus()
-                        == com.siheung.hanbaguni.entity.GroupPurchase.Status.OPEN
-                        && java.time.LocalDateTime.now()
-                        .isBefore(order.getGroupPurchase().getEndAt());
-
         Pickup pickup = null;
         if (order.getStatus() == Order.Status.PAID) {
             pickup = pickupService.createOrGetPickupForOrder(order);
         } else {
             pickup = pickupService.findByOrderId(order.getId()).orElse(null);
         }
+
+        boolean canRequestRefund =
+                order.getStatus() == Order.Status.PAID
+                        && order.getGroupPurchase().getStatus()
+                        == com.siheung.hanbaguni.entity.GroupPurchase.Status.OPEN
+                        && java.time.LocalDateTime.now()
+                        .isBefore(order.getGroupPurchase().getEndAt())
+                        && (pickup == null || pickup.getStatus() != Pickup.Status.PICKED_UP);
 
         model.addAttribute("order", order);
         model.addAttribute("canRequestRefund", canRequestRefund);

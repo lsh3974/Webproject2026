@@ -81,19 +81,27 @@ public class SellerPickupController {
             Pickup p = pickupService.getByCodeAndStore(code, storeId, loginUser.getUserId());
             Map<String, Object> data = new HashMap<>();
             data.put("id", p.getId());
+            data.put("orderId", p.getOrder() != null ? p.getOrder().getId() : null);
             data.put("pickupCode", p.getPickupCode());
             data.put("productName", p.getGroupPurchase().getProduct().getName());
             data.put("groupTitle", p.getGroupPurchase().getTitle());
             data.put("quantity", p.getQuantity());
             data.put("totalPrice", p.getGroupPurchase().getGroupPrice() * p.getQuantity());
-            data.put("customerName", p.getCustomerName() != null ? p.getCustomerName() : p.getCustomer().getDisplayName());
-            data.put("customerPhone", p.getCustomerPhone());
+            data.put("customerName", p.getCustomerName() != null ? p.getCustomerName() : (p.getCustomer() != null ? p.getCustomer().getDisplayName() : "구매자"));
+            data.put("customerPhone", maskPhoneNumber(p.getCustomerPhone()));
             data.put("status", p.getStatus().name());
             data.put("pickedUpAt", p.getPickedUpAt() != null ? p.getPickedUpAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : null);
             return ResponseEntity.ok(data);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
+    }
+
+    private String maskPhoneNumber(String phone) {
+        if (phone == null || phone.isBlank()) {
+            return "";
+        }
+        return phone.replaceAll("(\\d{2,3})[-.]?(\\d{3,4})[-.]?(\\d{4})", "$1-****-$3");
     }
 
     @PostMapping("/{pickupId}/ready")
@@ -105,7 +113,7 @@ public class SellerPickupController {
 
         storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
         try {
-            pickupService.markReady(pickupId, loginUser.getUserId());
+            pickupService.markReady(pickupId, storeId, loginUser.getUserId());
             redirectAttributes.addFlashAttribute("successMessage", "상품이 [준비완료] 상태로 변경되었습니다.");
         } catch (ResponseStatusException e) {
             redirectAttributes.addFlashAttribute("errorMessage", e.getReason());
@@ -124,7 +132,7 @@ public class SellerPickupController {
 
         storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
         try {
-            pickupService.markPickedUp(pickupId, loginUser.getUserId());
+            pickupService.markPickedUp(pickupId, storeId, loginUser.getUserId());
             redirectAttributes.addFlashAttribute("successMessage", "수령 완료 처리가 완료되었습니다.");
         } catch (ResponseStatusException e) {
             redirectAttributes.addFlashAttribute("errorMessage", e.getReason());

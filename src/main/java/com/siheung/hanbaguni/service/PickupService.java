@@ -53,6 +53,14 @@ public class PickupService {
         return pickup;
     }
 
+    public Pickup getByIdWithStoreAndOwnershipCheck(Long pickupId, Long storeId, Long sellerId) {
+        Pickup pickup = getByIdWithOwnershipCheck(pickupId, sellerId);
+        if (!pickup.getStore().getId().equals(storeId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 매장의 수령 건이 아닙니다.");
+        }
+        return pickup;
+    }
+
     public Optional<Pickup> findByOrderId(Long orderId) {
         return pickupRepository.findByOrderId(orderId);
     }
@@ -62,25 +70,50 @@ public class PickupService {
     }
 
     @Transactional
-    public Pickup createOrGetPickupForOrder(Order order) {
+    public synchronized Pickup createOrGetPickupForOrder(Order order) {
         if (order.getStatus() != Order.Status.PAID) {
             throw new IllegalStateException("결제 완료(PAID) 상태인 주문만 수령증을 발급할 수 있습니다.");
         }
 
-        return pickupRepository.findByOrderId(order.getId()).orElseGet(() -> {
-            String code = generateUniquePickupCode();
-            Pickup pickup = new Pickup(
-                    order,
-                    order.getGroupPurchase().getStore(),
-                    order.getGroupPurchase(),
-                    order.getUser(),
-                    code,
-                    order.getQuantity(),
-                    order.getUser().getDisplayName(),
-                    null
-            );
-            return pickupRepository.save(pickup);
-        });
+        Optional<Pickup> existing = pickupRepository.findByOrderId(order.getId());
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        String code = generateUniquePickupCode();
+        Pickup pickup = new Pickup(
+                order,
+                order.getGroupPurchase().getStore(),
+                order.getGroupPurchase(),
+                order.getUser(),
+                code,
+                order.getQuantity(),
+                order.getUser() != null ? order.getUser().getDisplayName() : "구매자",
+                order.getUser() != null ? order.getUser().getPhoneE164() : null
+        );
+        return pickupRepository.saveAndFlush(pickup);
+    }
+
+    @Transactional
+    public void markReady(Long pickupId, Long storeId, Long sellerId) {
+        Pickup pickup = getByIdWithStoreAndOwnershipCheck(pickupId, storeId, sellerId);
+        try {
+            pickup.markReady();
+            pickupRepository.saveAndFlush(pickup);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    @Transactional
+    public void markPickedUp(Long pickupId, Long storeId, Long sellerId) {
+        Pickup pickup = getByIdWithStoreAndOwnershipCheck(pickupId, storeId, sellerId);
+        try {
+            pickup.markPickedUp();
+            pickupRepository.saveAndFlush(pickup);
+        } catch (IllegalStateException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
     }
 
     @Transactional

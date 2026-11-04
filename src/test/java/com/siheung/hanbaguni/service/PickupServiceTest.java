@@ -23,7 +23,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class PickupServiceTest {
@@ -60,7 +59,7 @@ class PickupServiceTest {
 
         given(pickupRepository.findByOrderId(500L)).willReturn(Optional.empty());
         given(pickupRepository.existsByPickupCode(any())).willReturn(false);
-        given(pickupRepository.save(any(Pickup.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(pickupRepository.saveAndFlush(any(Pickup.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         // when
         Pickup created = pickupService.createOrGetPickupForOrder(order);
@@ -122,6 +121,36 @@ class PickupServiceTest {
     }
 
     @Test
+    @DisplayName("매장 ID와 수령건의 매장 불일치 시 예외 발생")
+    void markReady_storeMismatch_throwsException() {
+        // given
+        Long sellerId = 1L;
+        Long storeId1 = 10L;
+        Long storeId2 = 20L;
+
+        User seller = new User("seller@test.com", "hash", "판매자1");
+        ReflectionTestUtils.setField(seller, "id", sellerId);
+
+        Store store2 = new Store(seller, "시흥마트2호점", "123-45-67890", "031-123-4567", "시흥시", "101호", "소개");
+        ReflectionTestUtils.setField(store2, "id", storeId2);
+
+        Product product = new Product(store2, "사과", "과일", 15000, "1박스", "설명", null);
+        LocalDateTime now = LocalDateTime.now();
+        GroupPurchase gp = new GroupPurchase(store2, product, "사과 공구", 12000, 10, 50, 3, now, now.plusDays(3), now.plusDays(4), now.plusDays(5), "안내", "설명", GroupPurchase.Status.OPEN);
+
+        User customer = new User("customer@test.com", "hash", "구매자1");
+        Pickup pickup = new Pickup(store2, gp, customer, "PK-20261028-TEST", 2, "구매자1", "010-1234-5678");
+        ReflectionTestUtils.setField(pickup, "id", 1000L);
+
+        given(pickupRepository.findById(1000L)).willReturn(Optional.of(pickup));
+
+        // when & then
+        assertThatThrownBy(() -> pickupService.markReady(1000L, storeId1, sellerId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("해당 매장의 수령 건이 아닙니다");
+    }
+
+    @Test
     @DisplayName("수령 코드 스캔으로 수령완료(PICKED_UP) 확정 성공")
     void markPickedUpByCode_success() {
         // given
@@ -152,6 +181,38 @@ class PickupServiceTest {
         // then
         assertThat(completed.getStatus()).isEqualTo(Pickup.Status.PICKED_UP);
         assertThat(completed.getPickedUpAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("환불되거나 취소된 주문(REFUNDED)은 수령완료 처리 시 BAD_REQUEST 예외 발생")
+    void markPickedUp_orderRefunded_throwsException() {
+        // given
+        Long sellerId = 1L;
+        Long storeId = 10L;
+
+        User seller = new User("seller@test.com", "hash", "판매자1");
+        ReflectionTestUtils.setField(seller, "id", sellerId);
+
+        Store store = new Store(seller, "시흥마트", "123-45-67890", "031-123-4567", "시흥시", "101호", "소개");
+        ReflectionTestUtils.setField(store, "id", storeId);
+
+        Product product = new Product(store, "사과", "과일", 15000, "1박스", "설명", null);
+        LocalDateTime now = LocalDateTime.now();
+        GroupPurchase gp = new GroupPurchase(store, product, "사과 공구", 12000, 10, 50, 3, now, now.plusDays(3), now.plusDays(4), now.plusDays(5), "안내", "설명", GroupPurchase.Status.OPEN);
+
+        User customer = new User("customer@test.com", "hash", "구매자1");
+        Order order = new Order(customer, gp, 2, 12000, 24000, now.plusMinutes(15));
+        ReflectionTestUtils.setField(order, "status", Order.Status.REFUNDED); // 환불 완료 상태
+
+        Pickup pickup = new Pickup(order, store, gp, customer, "PK-TEST", 2, "구매자1", "010-1234-5678");
+        ReflectionTestUtils.setField(pickup, "id", 1002L);
+
+        given(pickupRepository.findById(1002L)).willReturn(Optional.of(pickup));
+
+        // when & then
+        assertThatThrownBy(() -> pickupService.markPickedUp(1002L, sellerId))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("결제 완료(PAID) 상태인 주문만 수령 처리할 수 있습니다");
     }
 
     @Test
