@@ -485,6 +485,76 @@ class RefundFlowTest {
         verify(gateway, never()).cancel(argThat(a -> a.orderId().equals(fixture.orderId())));
     }
 
+    @Autowired
+    jakarta.persistence.EntityManagerFactory emf;
+
+    @Test
+    void 판매자요청에서_미리읽은_모집이_결제성공을_덮어쓰면_안된다() throws Exception {
+        Long storeId = tx.execute(s -> em.find(GroupPurchase.class, fixture.groupId()).getStore().getId());
+        var requestEm = emf.createEntityManager();
+        org.springframework.transaction.support.TransactionSynchronizationManager.bindResource(
+                emf, new org.springframework.orm.jpa.EntityManagerHolder(requestEm));
+        var pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            // OSIV가 켜진 컨트롤러에서 서비스 쓰기 트랜잭션 전에 모집을 조회하는 순서와 같습니다.
+            GroupPurchase preloaded = sellerGroups.getWithStoreAndOwnershipCheck(
+                    storeId, fixture.groupId(), fixture.otherUserId());
+            var form = com.siheung.hanbaguni.dto.GroupPurchaseForm.from(preloaded);
+            form.setTitle("제목만 수정");
+
+            pool.submit(() -> {
+                Long id = tx.execute(s -> {
+                    GroupPurchase group = em.find(GroupPurchase.class, fixture.groupId());
+                    Order order = new Order(em.find(User.class, fixture.buyerId()), group,
+                            3, 1000, 3000, LocalDateTime.now().plusMinutes(10));
+                    em.persist(order);
+                    return order.getId();
+                });
+                var prepared = payments.prepare(id, fixture.buyerId());
+                when(gateway.confirm(any())).thenReturn(new PaymentData.Receipt(
+                        "race-payment", prepared.orderRef(), 3000, "KRW", "DONE"));
+                payments.confirm(id, fixture.buyerId(), new PaymentData.ConfirmRequest(
+                        "race-payment", prepared.orderRef(), 3000L));
+            }).get(10, java.util.concurrent.TimeUnit.SECONDS);
+
+            assertThatThrownBy(() -> sellerGroups.updateGroupPurchase(
+                    storeId, fixture.groupId(), fixture.otherUserId(), form))
+                    .isInstanceOf(ResponseStatusException.class).hasMessageContaining("409");
+        } finally {
+            org.springframework.transaction.support.TransactionSynchronizationManager.unbindResource(emf);
+            requestEm.close();
+            pool.shutdownNow();
+        }
+
+        tx.executeWithoutResult(s -> {
+            GroupPurchase saved = em.find(GroupPurchase.class, fixture.groupId());
+            assertThat(java.util.List.of(saved.getStatus(), saved.getCurrentQuantity()))
+                    .containsExactly(GroupPurchase.Status.SUCCESS, 5);
+        });
+    }
+
+    @Test
+    void 마감지난_목표미달_모집을_판매자수정으로_실패판정에서_제외하면_안된다() {
+        LocalDateTime now = LocalDateTime.now();
+        tx.executeWithoutResult(s -> em.createQuery(
+                "update GroupPurchase g set g.endAt = :past where g.id = :id")
+                .setParameter("past", now.minusSeconds(30))
+                .setParameter("id", fixture.groupId()).executeUpdate());
+        Long storeId = tx.execute(s -> em.find(GroupPurchase.class, fixture.groupId()).getStore().getId());
+        var form = tx.execute(s -> com.siheung.hanbaguni.dto.GroupPurchaseForm.from(
+                em.find(GroupPurchase.class, fixture.groupId())));
+        form.setEndAt(now.plusDays(1));
+        // 이미 마감된 모집을 연장하려는 요청은 거절되거나 실패 판정을 먼저 처리해야 합니다.
+        try {
+            sellerGroups.updateGroupPurchase(storeId, fixture.groupId(), fixture.otherUserId(), form);
+        } catch (ResponseStatusException expectedRejection) {
+            assertThat(expectedRejection.getStatusCode().value()).isIn(400, 409);
+        }
+        closing.closeIfDue(fixture.groupId(), now);
+        tx.executeWithoutResult(s -> assertThat(em.find(GroupPurchase.class, fixture.groupId()).getStatus())
+                .isEqualTo(GroupPurchase.Status.FAILED));
+    }
+
     private Receipt paidReceipt() {
         return new Receipt(
                 fixture.paymentKey(),
