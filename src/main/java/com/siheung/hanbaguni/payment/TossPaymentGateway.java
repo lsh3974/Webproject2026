@@ -40,6 +40,7 @@ public class TossPaymentGateway {
                 .build();
     }
 
+    // 결제 승인
     public Receipt confirm(Attempt attempt) {
         checkTestKey();
 
@@ -61,6 +62,7 @@ public class TossPaymentGateway {
                 .body(Receipt.class));
     }
 
+    // 결제 키로 승인 결과 조회
     public Receipt find(String paymentKey) {
         checkTestKey();
 
@@ -75,6 +77,7 @@ public class TossPaymentGateway {
                 .body(Receipt.class));
     }
 
+    // 주문번호로 승인 결과 조회
     public Receipt findByOrderId(String orderRef) {
         checkTestKey();
 
@@ -89,6 +92,62 @@ public class TossPaymentGateway {
                 .body(Receipt.class));
     }
 
+    // DB에 저장한 주문 금액 전액을 취소 요청합니다.
+    public RefundData.Receipt cancel(RefundData.Attempt attempt) {
+        checkTestKey();
+
+        if (attempt.amount() <= 0
+                || attempt.paymentKey() == null
+                || attempt.paymentKey().isBlank()
+                || attempt.refundRequestId() == null
+                || attempt.refundRequestId().isBlank()
+                || attempt.refundRequestId().length() > 64
+                || attempt.reason() == null
+                || attempt.reason().isBlank()
+                || attempt.reason().length() > 200) {
+            throw new IllegalArgumentException(
+                    "환불 요청 정보가 올바르지 않습니다."
+            );
+        }
+
+        return execute(() -> client.post()
+                .uri(
+                        "/v1/payments/{paymentKey}/cancel",
+                        attempt.paymentKey()
+                )
+                .headers(headers -> headers.setBasicAuth(
+                        secretKey,
+                        "",
+                        StandardCharsets.UTF_8
+                ))
+                .header(
+                        "Idempotency-Key",
+                        attempt.refundRequestId()
+                )
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of(
+                        "cancelReason", attempt.reason(),
+                        "cancelAmount", attempt.amount()
+                ))
+                .retrieve()
+                .body(RefundData.Receipt.class));
+    }
+
+    // 환불 확인용 조회: 최초 금액과 남은 금액을 함께 받습니다.
+    public RefundData.Receipt findForRefund(String paymentKey) {
+        checkTestKey();
+
+        return execute(() -> client.get()
+                .uri("/v1/payments/{paymentKey}", paymentKey)
+                .headers(headers -> headers.setBasicAuth(
+                        secretKey,
+                        "",
+                        StandardCharsets.UTF_8
+                ))
+                .retrieve()
+                .body(RefundData.Receipt.class));
+    }
+
     public void checkTestKey() {
         if (!secretKey.startsWith("test_sk_")) {
             throw new IllegalStateException(
@@ -97,14 +156,14 @@ public class TossPaymentGateway {
         }
     }
 
-    private Receipt execute(Supplier<Receipt> request) {
-        Receipt receipt;
+    // 결제 응답과 환불 응답에 공통으로 사용하는 통신 처리입니다.
+    private <T> T execute(Supplier<T> request) {
+        T response;
 
         try {
-            receipt = request.get();
+            response = request.get();
 
         } catch (RestClientResponseException exception) {
-            // Toss가 실제로 반환한 HTTP 상태와 오류 코드를 보존합니다.
             throw new TossPaymentException(
                     HTTP_RESPONSE,
                     exception.getStatusCode().value(),
@@ -112,7 +171,6 @@ public class TossPaymentGateway {
             );
 
         } catch (ResourceAccessException exception) {
-            // 시간 초과나 연결 실패는 결제 실패의 증거가 아닙니다.
             throw new TossPaymentException(
                     NETWORK,
                     0,
@@ -120,7 +178,6 @@ public class TossPaymentGateway {
             );
 
         } catch (RestClientException exception) {
-            // 응답 변환 실패 등은 결과 불확실로 분류합니다.
             throw new TossPaymentException(
                     INVALID_RESPONSE,
                     0,
@@ -128,7 +185,7 @@ public class TossPaymentGateway {
             );
         }
 
-        if (receipt == null) {
+        if (response == null) {
             throw new TossPaymentException(
                     INVALID_RESPONSE,
                     0,
@@ -136,7 +193,7 @@ public class TossPaymentGateway {
             );
         }
 
-        return receipt;
+        return response;
     }
 
     private String readErrorCode(

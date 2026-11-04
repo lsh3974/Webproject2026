@@ -43,6 +43,9 @@ class GroupPurchaseServiceTest {
     @Mock
     private OrderRepository orderRepository;
 
+    @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
     @InjectMocks
     private GroupPurchaseService groupPurchaseService;
 

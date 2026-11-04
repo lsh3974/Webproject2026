@@ -154,6 +154,49 @@ public class GroupPurchase {
                 quantity
         );
     }
+    public boolean succeedIfTargetReached() {
+        if (status != Status.OPEN) {
+            return false;
+        }
+
+        if (currentQuantity < targetQuantity) {
+            return false;
+        }
+
+        status = Status.SUCCESS;
+        return true;
+    }
+
+    public void removePaidQuantity(int quantity) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException(
+                    "차감 수량은 1개 이상이어야 합니다."
+            );
+        }
+
+        if (currentQuantity < quantity) {
+            throw new IllegalStateException(
+                    "모집 수량보다 많은 수량을 차감할 수 없습니다."
+            );
+        }
+
+        currentQuantity -= quantity;
+    }
+    public boolean failIfDeadlineReached(
+            LocalDateTime now,
+            boolean hasPendingApproval
+    ) {
+        if (status != Status.OPEN || now.isBefore(endAt)) {
+            return false;
+        }
+
+        if (currentQuantity >= targetQuantity || hasPendingApproval) {
+            return false;
+        }
+
+        status = Status.FAILED;
+        return true;
+    }
 
     public enum Status {
         DRAFT, OPEN, SUCCESS, FAILED, CLOSED

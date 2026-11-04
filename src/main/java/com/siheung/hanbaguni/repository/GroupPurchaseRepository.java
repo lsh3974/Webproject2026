@@ -52,4 +52,16 @@ public interface GroupPurchaseRepository extends JpaRepository<GroupPurchase, Lo
             ORDER BY gp.endAt ASC
             """)
     List<GroupPurchase> findOpenGroupPurchases(@Param("now") LocalDateTime now);
+
+    @Query("""
+        select g.id
+        from GroupPurchase g
+        where g.status = :status
+          and g.endAt <= :now
+        order by g.endAt, g.id
+        """)
+    List<Long> findDueGroupIds(
+            @Param("status") GroupPurchase.Status status,
+            @Param("now") LocalDateTime now
+    );
 }

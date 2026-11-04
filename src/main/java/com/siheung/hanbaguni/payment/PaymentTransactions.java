@@ -165,8 +165,21 @@ public class PaymentTransactions {
 
         order.markPaid(attempt.paymentKey());
 
-        order.getGroupPurchase()
-                .addPaidQuantity(order.getQuantity());
+        GroupPurchase group = order.getGroupPurchase();
+        group.addPaidQuantity(order.getQuantity());
+
+        // 목표에 도달한 순간 모집 성공으로 전환합니다.
+        boolean becameSuccessful = group.succeedIfTargetReached();
+
+        if (becameSuccessful) {
+            // 아직 승인 처리를 시작하지 않은 예약만 만료시킵니다.
+            for (Order pendingOrder :
+                    orders.findPendingOrdersForGroupWithLock(group.getId())) {
+                pendingOrder.expireForGroupSuccess();
+            }
+        }
+
+
 
         return paidResult();
     }

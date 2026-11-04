@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<section th:fragment="actions(order, canRequestRefund)"
+         class="mt-4">
+
+    <!-- 환불 처리 결과 안내 -->
+    <div th:if="${warningMessage}"
+         class="alert alert-warning"
+         role="alert"
+         th:text="${warningMessage}">
+        환불 결과를 확인하고 있습니다.
+    </div>
+
+    <!-- 모집 중인 결제 완료 주문의 취소 요청 -->
+    <div th:if="${canRequestRefund}"
+         class="border rounded-3 p-3">
+
+        <h2 class="h6 fw-bold">주문 취소·전액 환불</h2>
+
+        <p class="small text-muted">
+            모집 중인 주문은 취소할 수 있습니다.
+            취소가 접수되면 공동구매 참여가 취소되며,
+            결제 금액 전액의 환불을 진행합니다.
+        </p>
+
+        <form th:action="@{/orders/{id}/refund(id=${order.id})}"
+              method="post"
+              onsubmit="if (!confirm('주문을 취소하고 전액 환불을 요청하시겠습니까?')) return false; this.querySelector('button[type=submit]').disabled = true; return true;">
+
+            <label for="refundReason" class="form-label">
+                취소 사유
+            </label>
+
+            <textarea id="refundReason"
+                      name="reason"
+                      class="form-control"
+                      rows="2"
+                      maxlength="200"
+                      required
+                      placeholder="취소 사유를 200자 이내로 입력해주세요."></textarea>
+
+            <button type="submit"
+                    class="btn btn-outline-danger mt-3">
+                취소·전액 환불 요청
+            </button>
+        </form>
+    </div>
+
+    <!-- 접수됐지만 전액 환불 완료가 아직 확인되지 않은 주문 -->
+    <div th:if="${order.status.name() == 'REFUND_PENDING'}"
+         class="alert alert-warning">
+
+        <h2 class="h6 fw-bold">환불 처리 중</h2>
+
+        <p class="mb-3">
+            취소 요청은 접수되었으며, 전액 환불 완료를 확인하고 있습니다.
+            다시 확인하면 필요할 경우 같은 요청으로 환불을 재시도합니다.
+        </p>
+
+        <form th:action="@{/orders/{id}/refund/retry(id=${order.id})}"
+              method="post"
+              onsubmit="this.querySelector('button[type=submit]').disabled = true;">
+
+            <button type="submit"
+                    class="btn btn-outline-dark">
+                환불 다시 확인
+            </button>
+        </form>
+    </div>
+
+    <!-- 목표 달성 후에는 구매자 직접 취소 불가 -->
+    <div th:if="${order.status.name() == 'PAID'
+                and order.groupPurchase.status.name() == 'SUCCESS'}"
+         class="alert alert-info mb-0">
+        공동구매가 목표 수량을 달성했습니다.
+        모집 성공 이후에는 직접 취소할 수 없습니다.
+    </div>
+
+</section>
+
+</body>
+</html>

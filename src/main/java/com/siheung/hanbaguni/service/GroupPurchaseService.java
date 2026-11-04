@@ -12,6 +12,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -23,16 +25,19 @@ public class GroupPurchaseService {
     private final StoreService storeService;
     private final ProductService productService;
     private final OrderRepository orderRepository;
+    private final EntityManager entityManager;
 
     public GroupPurchaseService(
             GroupPurchaseRepository groupPurchaseRepository,
             StoreService storeService,
             ProductService productService,
-            OrderRepository orderRepository) {
+            OrderRepository orderRepository,
+            EntityManager entityManager) {
         this.groupPurchaseRepository = groupPurchaseRepository;
         this.storeService = storeService;
         this.productService = productService;
         this.orderRepository = orderRepository;
+        this.entityManager = entityManager;
     }
 
     public List<GroupPurchase> findByStoreId(Long storeId) {
@@ -65,6 +70,11 @@ public class GroupPurchaseService {
         Store store = storeService.getStoreWithOwnershipCheck(storeId, sellerId);
         Product product = productService.getProductWithStoreAndOwnershipCheck(storeId, form.getProductId(), sellerId);
 
+        if (form.getStatus() != null && form.getStatus() != GroupPurchase.Status.DRAFT
+                && form.getStatus() != GroupPurchase.Status.OPEN) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "새 모집은 초안 또는 게시 상태로만 만들 수 있습니다.");
+        }
+
         GroupPurchase gp = new GroupPurchase(
                 store,
                 product,
@@ -88,10 +98,17 @@ public class GroupPurchaseService {
 
     @Transactional
     public void updateGroupPurchase(Long storeId, Long id, Long sellerId, GroupPurchaseForm form) {
-        GroupPurchase gp = groupPurchaseRepository.findByIdWithLock(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "공동구매 모집 정보를 찾을 수 없습니다."));
-        validateStoreAndOwnership(gp, storeId, sellerId);
+        GroupPurchase gp = lockForSeller(storeId, id, sellerId);
 
+        LocalDateTime now = LocalDateTime.now();
+        if (gp.getStatus() == GroupPurchase.Status.OPEN
+                && !now.isBefore(gp.getEndAt())
+                && !java.util.Objects.equals(gp.getEndAt(), form.getEndAt())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "이미 마감 시각이 지난 모집의 마감 일시는 변경할 수 없습니다.");
+        }
+        validateSellerChange(gp, form.getStatus(),
+                !java.util.Objects.equals(gp.getTargetQuantity(), form.getTargetQuantity()));
         validateUpdatePolicy(gp, form);
 
         gp.update(
@@ -112,18 +129,16 @@ public class GroupPurchaseService {
 
     @Transactional
     public void publishGroupPurchase(Long storeId, Long id, Long sellerId) {
-        GroupPurchase gp = groupPurchaseRepository.findByIdWithLock(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "공동구매 모집 정보를 찾을 수 없습니다."));
-        validateStoreAndOwnership(gp, storeId, sellerId);
+        GroupPurchase gp = lockForSeller(storeId, id, sellerId);
+        validateSellerChange(gp, GroupPurchase.Status.OPEN, false);
         gp.publish();
     }
 
     @Transactional
     public void updateStatus(Long storeId, Long id, Long sellerId, GroupPurchase.Status status) {
-        GroupPurchase gp = groupPurchaseRepository.findByIdWithLock(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "공동구매 모집 정보를 찾을 수 없습니다."));
-        validateStoreAndOwnership(gp, storeId, sellerId);
+        GroupPurchase gp = lockForSeller(storeId, id, sellerId);
 
+        validateSellerChange(gp, status, false);
         validateStatusTransition(gp, status);
 
         gp.updateStatus(status);
@@ -131,14 +146,22 @@ public class GroupPurchaseService {
 
     @Transactional
     public void deleteGroupPurchase(Long storeId, Long id, Long sellerId) {
-        GroupPurchase gp = groupPurchaseRepository.findByIdWithLock(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "공동구매 모집 정보를 찾을 수 없습니다."));
-        validateStoreAndOwnership(gp, storeId, sellerId);
+        GroupPurchase gp = lockForSeller(storeId, id, sellerId);
 
         if (gp.getCurrentQuantity() > 0 || orderRepository.existsByGroupPurchaseId(id)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 예약 또는 주문 내역이 있는 공동구매는 삭제할 수 없습니다.");
         }
         groupPurchaseRepository.delete(gp);
+    }
+
+    private GroupPurchase lockForSeller(Long storeId, Long id, Long sellerId) {
+        GroupPurchase gp = groupPurchaseRepository.findByIdWithLock(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "공동구매 모집 정보를 찾을 수 없습니다."));
+        // 요청에서 앞서 읽은 객체가 있어도, 잠금을 획득한 뒤 최신 상태와 수량으로 검사합니다.
+        entityManager.refresh(gp, LockModeType.PESSIMISTIC_WRITE);
+        validateStoreAndOwnership(gp, storeId, sellerId);
+        return gp;
     }
 
     private void validateStoreAndOwnership(GroupPurchase gp, Long storeId, Long sellerId) {
@@ -147,6 +170,19 @@ public class GroupPurchaseService {
         }
         if (!gp.getStore().getId().equals(storeId)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "해당 매장에 속한 공동구매 모집이 아닙니다.");
+        }
+    }
+
+    private void validateSellerChange(GroupPurchase gp, GroupPurchase.Status requested, boolean targetChanged) {
+        boolean statusChanged = requested != null && requested != gp.getStatus();
+        if (!statusChanged && !targetChanged) {
+            return;
+        }
+        if (gp.getStatus() == GroupPurchase.Status.SUCCESS || gp.getStatus() == GroupPurchase.Status.FAILED
+                || requested == GroupPurchase.Status.SUCCESS || requested == GroupPurchase.Status.FAILED
+                || orderRepository.existsByGroupPurchaseId(gp.getId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "주문 이력이 있거나 결과가 확정된 모집의 목표와 상태는 변경할 수 없습니다. 성공·실패는 자동으로 결정됩니다.");
         }
     }
 

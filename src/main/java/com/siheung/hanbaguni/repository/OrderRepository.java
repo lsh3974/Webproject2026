@@ -1,6 +1,7 @@
 package com.siheung.hanbaguni.repository;
 
 import com.siheung.hanbaguni.entity.Order;
+import com.siheung.hanbaguni.entity.GroupPurchase;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -179,4 +180,49 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             """)
     List<PendingPayment> findDuePayments(@Param("now") LocalDateTime now,
                                          org.springframework.data.domain.Pageable page);
+    @Query("""
+        select case when count(o) > 0 then true else false end
+        from Order o
+        where o.groupPurchase.id = :groupPurchaseId
+          and o.status = :status
+        """)
+    boolean existsByGroupPurchaseIdAndStatus(
+            @Param("groupPurchaseId") Long groupPurchaseId,
+            @Param("status") Order.Status status
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        select o
+        from Order o
+        where o.groupPurchase.id = :groupPurchaseId
+          and o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
+        order by o.id
+        """)
+    List<Order> findPendingOrdersForGroupWithLock(
+            @Param("groupPurchaseId") Long groupPurchaseId
+    );
+
+    @Query("""
+        select o.groupPurchase.id
+        from Order o
+        where o.id = :orderId
+        """)
+    Optional<Long> findGroupIdForRefund(
+            @Param("orderId") Long orderId
+    );
+
+    @Query("""
+        select o.id
+        from Order o
+        where (o.groupPurchase.status = :groupStatus and o.status = :paid)
+           or o.status = :pendingRefund
+        order by o.id
+        """)
+    List<Long> findRefundCandidateIds(
+            @Param("groupStatus") GroupPurchase.Status groupStatus,
+            @Param("paid") Order.Status paid,
+            @Param("pendingRefund") Order.Status pendingRefund
+    );
+
 }
