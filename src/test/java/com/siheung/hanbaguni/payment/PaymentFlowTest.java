@@ -5,9 +5,14 @@ import com.siheung.hanbaguni.entity.Order;
 import com.siheung.hanbaguni.entity.Product;
 import com.siheung.hanbaguni.entity.Store;
 import com.siheung.hanbaguni.entity.User;
+import com.siheung.hanbaguni.dto.GroupPurchaseForm;
+import com.siheung.hanbaguni.repository.OrderRepository;
+import com.siheung.hanbaguni.service.GroupPurchaseService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -40,13 +45,10 @@ import java.util.concurrent.TimeUnit;
 class PaymentFlowTest {
 
     @Autowired
-    PaymentTransactions paymentTransactions;
+    PaymentService payments;
 
     @Autowired
     com.siheung.hanbaguni.service.OrderReservationService reservations;
-
-    @Autowired
-    PaymentService payments;
 
     @Autowired
     EntityManager em;
@@ -216,12 +218,11 @@ class PaymentFlowTest {
         assertThat(snapshot().currentQuantity()).isZero();
     }
 
-    @Test
-    void 잘못된_키로_승인거절되고_주문번호에도_결제가_없으면_종료한다() {
+    @ParameterizedTest
+    @CsvSource({"400, INVALID_PAYMENT_KEY", "403, REJECT_CARD_COMPANY", "403, REJECT_CARD_PAYMENT"})
+    void 승인거절후_주문번호에도_결제가_없으면_종료한다(int statusCode, String rejectionCode) {
         TossPaymentException rejected = new TossPaymentException(
-                TossPaymentException.Kind.HTTP_RESPONSE,
-                400,
-                "INVALID_PAYMENT_KEY"
+                TossPaymentException.Kind.HTTP_RESPONSE, statusCode, rejectionCode
         );
 
         TossPaymentException notFound = new TossPaymentException(
@@ -242,6 +243,21 @@ class PaymentFlowTest {
         assertThat(snapshot().currentQuantity()).isZero();
 
         verify(gateway, times(1)).confirm(any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"403, FORBIDDEN_REQUEST", "500, REJECT_CARD_COMPANY"})
+    void 확정거절이_아니면_거래없음만으로_만료시키지_않는다(int statusCode, String code) {
+        when(gateway.confirm(any())).thenThrow(new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE, statusCode, code));
+        TossPaymentException missing = new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE, 404, "NOT_FOUND_PAYMENT");
+        when(gateway.find(paymentKey)).thenThrow(missing);
+        when(gateway.findByOrderId(prepared.orderRef())).thenThrow(missing);
+
+        assertThat(confirm(prepared.amount()).status()).isEqualTo("PAYMENT_PENDING");
+        tx.executeWithoutResult(s -> assertThat(em.find(Order.class, fixture.orderId())
+                .getPaymentRejectionCode()).isNull());
     }
 
     @Test
@@ -268,12 +284,11 @@ class PaymentFlowTest {
     }
 
 
-    @Test
-    void 승인거절_기록을_저장한뒤_조회가_실패해도_재확인으로_종료한다() {
+    @ParameterizedTest
+    @CsvSource({"400, INVALID_PAYMENT_KEY", "403, REJECT_CARD_COMPANY", "403, REJECT_CARD_PAYMENT"})
+    void 승인거절_기록을_저장한뒤_조회가_실패해도_재확인으로_종료한다(int statusCode, String rejectionCode) {
         TossPaymentException rejected = new TossPaymentException(
-                TossPaymentException.Kind.HTTP_RESPONSE,
-                400,
-                "INVALID_PAYMENT_KEY"
+                TossPaymentException.Kind.HTTP_RESPONSE, statusCode, rejectionCode
         );
 
         TossPaymentException notFound = new TossPaymentException(
@@ -304,7 +319,7 @@ class PaymentFlowTest {
                         .getPaymentRejectionCode()
         );
 
-        assertThat(savedCode).isEqualTo("INVALID_PAYMENT_KEY");
+        assertThat(savedCode).isEqualTo(rejectionCode);
 
         // 통신이 복구되어 결제 정보 없음을 확인할 수 있게 됨
         doThrow(notFound)
@@ -425,6 +440,165 @@ class PaymentFlowTest {
             executor.awaitTermination(5, TimeUnit.SECONDS);
         }
     }
+    @Autowired
+    OrderRepository orders;
+
+    @Autowired
+    GroupPurchaseService sellerGroups;
+
+    @Test
+    void 최초_준비만_유예하고_반복준비로_기한을_연장하지_않는다() {
+        Fixture fresh = createFixture();
+        LocalDateTime before = LocalDateTime.now();
+        tx.executeWithoutResult(s -> em.createQuery(
+                "update Order o set o.reservedUntil = :time where o.id = :id")
+                .setParameter("time", before.plusMinutes(1)).setParameter("id", fresh.orderId()).executeUpdate());
+        Prepared first = payments.prepare(fresh.orderId(), fresh.buyerId());
+        LocalDateTime until = tx.execute(s -> em.find(Order.class, fresh.orderId()).getReservedUntil());
+        assertThat(until).isBetween(before.plusMinutes(5).minusSeconds(1), LocalDateTime.now().plusMinutes(5).plusSeconds(1));
+        assertThat(payments.prepare(fresh.orderId(), fresh.buyerId()).orderRef()).isEqualTo(first.orderRef());
+        tx.executeWithoutResult(s -> {
+            Order order = em.find(Order.class, fresh.orderId());
+            assertThat(order.getReservedUntil()).isEqualTo(until);
+            Long groupId = order.getGroupPurchaseId();
+            assertThat(orders.sumActivePendingQuantity(groupId, until.minusSeconds(1))).isEqualTo(2);
+            assertThat(orders.sumActivePendingQuantity(groupId, until)).isZero();
+            assertThat(orders.findMaxReservedUntil(groupId, before)).contains(until);
+        });
+    }
+
+    @Test
+    void 원래_기한이_지나도_결제창_유예_안이면_승인한다() {
+        LocalDateTime opened = LocalDateTime.now().minusMinutes(2);
+        Long id = tx.execute(s -> {
+            Order base = em.find(Order.class, fixture.orderId());
+            Order order = new Order(base.getUser(), base.getGroupPurchase(), 1, 1000, 1000, opened.plusMinutes(1));
+            order.prepareCheckout("grace-" + paymentKey, opened);
+            em.persist(order);
+            return order.getId();
+        });
+        String ref = "grace-" + paymentKey;
+        when(gateway.confirm(any())).thenReturn(new Receipt(paymentKey, ref, 1000, "KRW", "DONE"));
+        assertThat(payments.confirm(id, fixture.buyerId(), new ConfirmRequest(paymentKey, ref, 1000L)).status())
+                .isEqualTo("PAID");
+    }
+
+    @Test
+    void 결제창_유예는_공동구매_마감시각을_넘지_않는다() {
+        tx.executeWithoutResult(s -> {
+            Order base = em.find(Order.class, fixture.orderId());
+            GroupPurchase group = base.getGroupPurchase();
+            LocalDateTime opened = group.getEndAt().minusMinutes(2);
+            Order order = new Order(base.getUser(), group, 1, 1000, 1000, opened.plusMinutes(1));
+            order.prepareCheckout("capped", opened);
+            assertThat(order.getReservedUntil()).isEqualTo(group.getEndAt());
+            assertThatThrownBy(() -> order.beginPayment(group.getEndAt())).isInstanceOf(IllegalStateException.class);
+        });
+    }
+
+    @Test
+    void 기한이_지난_승인중_주문도_회원별_수량과_마감단축을_보호한다() {
+        tx.executeWithoutResult(s -> {
+            Order order = em.find(Order.class, fixture.orderId());
+            order.beginPayment(LocalDateTime.now());
+            order.bindPaymentKey(paymentKey);
+            em.flush();
+            em.createQuery("update Order o set o.reservedUntil = :time where o.id = :id")
+                    .setParameter("time", LocalDateTime.now().minusMinutes(1))
+                    .setParameter("id", order.getId()).executeUpdate();
+        });
+        GroupPurchaseForm form = tx.execute(s -> GroupPurchaseForm.from(
+                em.find(Order.class, fixture.orderId()).getGroupPurchase()));
+        Long groupId = tx.execute(s -> em.find(Order.class, fixture.orderId()).getGroupPurchaseId());
+        Long storeId = tx.execute(s -> em.find(GroupPurchase.class, groupId).getStore().getId());
+        form.setLimitPerUser(1);
+        assertThatThrownBy(() -> sellerGroups.updateGroupPurchase(storeId, groupId, fixture.sellerId(), form))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("1인당");
+        form.setLimitPerUser(10);
+        form.setEndAt(form.getEndAt().minusMinutes(1));
+        assertThatThrownBy(() -> sellerGroups.updateGroupPurchase(storeId, groupId, fixture.sellerId(), form))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("승인 결과");
+    }
+
+    @Autowired
+    PaymentTransactions transactions;
+
+    // 외부 HTTP를 호출하기 직전에 프로세스가 종료된 DB 상태를 재현합니다.
+    private void interruptBeforeApproval() {
+        transactions.begin(fixture.orderId(), fixture.buyerId(), request(prepared.amount()));
+        tx.executeWithoutResult(s -> em.createQuery(
+                        "update Order o set o.paymentRetryAt = :past where o.id = :id")
+                .setParameter("past", LocalDateTime.now().minusMinutes(1))
+                .setParameter("id", fixture.orderId()).executeUpdate());
+    }
+
+    @Test
+    void 승인전_중단되면_서버가_저장된_동일요청으로_복구한다() {
+        interruptBeforeApproval();
+        when(gateway.findByOrderId(prepared.orderRef())).thenThrow(new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE, 404, "NOT_FOUND_PAYMENT"));
+        when(gateway.confirm(any())).thenReturn(receipt("DONE", prepared.amount()));
+
+        var job = new PaymentRecoveryJob(orders, payments);
+        job.recoverPendingPayments();
+        job.recoverPendingPayments();
+
+        verify(gateway, times(1)).confirm(argThat(a ->
+                a.orderRef().equals(prepared.orderRef()) && a.paymentKey().equals(paymentKey)
+                        && a.amount() == prepared.amount()));
+        assertThat(snapshot().status()).isEqualTo(Order.Status.PAID);
+        assertThat(snapshot().currentQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void 이미_승인된_결제를_발견하면_재전송없이_복구한다() {
+        interruptBeforeApproval();
+        when(gateway.findByOrderId(prepared.orderRef())).thenReturn(receipt("DONE", prepared.amount()));
+        payments.recover(fixture.orderId(), fixture.buyerId(), LocalDateTime.now());
+        verify(gateway, never()).confirm(any());
+        assertThat(snapshot().status()).isEqualTo(Order.Status.PAID);
+        assertThat(snapshot().currentQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void 복구승인에서_세션만료가_확정되고_거래도_없으면_수량을_해제한다() {
+        interruptBeforeApproval();
+        when(gateway.findByOrderId(prepared.orderRef())).thenThrow(new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE, 404, "NOT_FOUND_PAYMENT"));
+        when(gateway.confirm(any())).thenThrow(new TossPaymentException(
+                TossPaymentException.Kind.HTTP_RESPONSE, 404, "NOT_FOUND_PAYMENT_SESSION"));
+        payments.recover(fixture.orderId(), fixture.buyerId(), LocalDateTime.now());
+        assertThat(snapshot().status()).isEqualTo(Order.Status.EXPIRED);
+        assertThat(snapshot().currentQuantity()).isZero();
+    }
+
+    @Test
+    void 서버복구_조회가_불확실하면_승인을_재전송하지_않는다() {
+        interruptBeforeApproval();
+        when(gateway.findByOrderId(prepared.orderRef())).thenThrow(new ResourceAccessException("timeout"));
+        payments.recover(fixture.orderId(), fixture.buyerId(), LocalDateTime.now());
+        verify(gateway, never()).confirm(any());
+        assertThat(snapshot().status()).isEqualTo(Order.Status.PAYMENT_PENDING);
+        assertThat(snapshot().currentQuantity()).isZero();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = User.Status.class, names = {"SUSPENDED", "WITHDRAWN"})
+    void 승인도중_회원상태가_바뀌어도_결과를_한번만_반영한다(User.Status accountStatus) {
+        Fixture other = createFixture();
+        when(gateway.confirm(any())).thenAnswer(invocation -> {
+            tx.executeWithoutResult(s -> em.createQuery("update User u set u.status = :status where u.id in :ids")
+                    .setParameter("status", accountStatus)
+                    .setParameter("ids", java.util.List.of(fixture.buyerId(), other.buyerId())).executeUpdate());
+            return receipt("DONE", prepared.amount());
+        });
+        assertThat(confirm(prepared.amount()).status()).isEqualTo("PAID");
+        assertThat(payments.retry(fixture.orderId(), fixture.buyerId()).status()).isEqualTo("PAID");
+        assertThat(snapshot().currentQuantity()).isEqualTo(2);
+        assertThatThrownBy(() -> payments.prepare(other.orderId(), other.buyerId()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
+        verify(gateway, times(1)).confirm(any());
+    }
 
     @Test
     void 결제완료_수량이_목표미만이면_모집중을_유지한다() {
@@ -508,7 +682,7 @@ class PaymentFlowTest {
 
         String otherPaymentKey = "other-payment-" + UUID.randomUUID();
 
-        Attempt started = paymentTransactions.begin(
+        Attempt started = transactions.begin(
                 approvingOrderId,
                 fixture.buyerId(),
                 new ConfirmRequest(
@@ -597,6 +771,21 @@ class PaymentFlowTest {
         });
 
         verify(gateway, times(1)).confirm(any());
+    }
+
+    @Test
+    void 판매자_수정은_유효예약의_최대수량과_마감을_보호한다() {
+        GroupPurchaseForm form = tx.execute(s -> GroupPurchaseForm.from(
+                em.find(Order.class, fixture.orderId()).getGroupPurchase()));
+        Long groupId = tx.execute(s -> em.find(Order.class, fixture.orderId()).getGroupPurchaseId());
+        Long storeId = tx.execute(s -> em.find(GroupPurchase.class, groupId).getStore().getId());
+        form.setMaxQuantity(1);
+        assertThatThrownBy(() -> sellerGroups.updateGroupPurchase(storeId, groupId, fixture.sellerId(), form))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("최대 모집 수량");
+        form.setMaxQuantity(20);
+        form.setEndAt(LocalDateTime.now().plusMinutes(1));
+        assertThatThrownBy(() -> sellerGroups.updateGroupPurchase(storeId, groupId, fixture.sellerId(), form))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("예약의 만료");
     }
 
     private Result confirm(long amount) {

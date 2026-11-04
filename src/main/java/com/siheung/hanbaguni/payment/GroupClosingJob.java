@@ -20,17 +20,8 @@ public class GroupClosingJob {
     private final OrderRepository orders;
     private final GroupClosingTransactions closing;
     private final RefundService refunds;
-    private final PaymentService payments;
 
     public void runOnce(LocalDateTime now) {
-        for (Long orderId : orders.findDuePaymentIds(Order.Status.PAYMENT_PENDING, now)) {
-            try {
-                payments.recoverPending(orderId);
-            } catch (RuntimeException ex) {
-                log.warn("마감 결제 재조회 오류 orderId={}", orderId, ex);
-            }
-        }
-
         for (Long groupId : groups.findDueGroupIds(GroupPurchase.Status.OPEN, now)) {
             try {
                 closing.closeIfDue(groupId, now);

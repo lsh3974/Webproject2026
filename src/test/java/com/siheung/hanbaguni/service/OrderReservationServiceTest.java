@@ -281,6 +281,7 @@ class OrderReservationServiceTest {
 
         Order order = new Order(owner, gp, 2, 12000, 24000, LocalDateTime.now().plusMinutes(15));
         ReflectionTestUtils.setField(order, "id", 10L);
+        order.beginPayment(LocalDateTime.now());
         order.markPaid("pay_key_123");
 
         given(orderRepository.findByIdWithLock(10L)).willReturn(Optional.of(order));

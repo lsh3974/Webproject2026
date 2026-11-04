@@ -1,6 +1,7 @@
 package com.siheung.hanbaguni.repository;
 
 import com.siheung.hanbaguni.entity.Order;
+import com.siheung.hanbaguni.entity.GroupPurchase;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -17,7 +18,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
-import com.siheung.hanbaguni.entity.GroupPurchase;
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @EntityGraph(attributePaths = {"groupPurchase", "groupPurchase.store", "groupPurchase.product"})
@@ -33,19 +33,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT o FROM Order o WHERE o.id = :id")
     Optional<Order> findByIdWithLock(@Param("id") Long id);
 
-    @Query("select case when count(o) > 0 then true else false end from Order o where o.groupPurchase.id = :groupId")
-    boolean existsByGroupPurchaseId(@Param("groupId") Long groupPurchaseId);
-
-    @Query("""
-        select case when count(o) > 0 then true else false end
-        from Order o
-        where o.groupPurchase.id = :groupPurchaseId
-          and o.status = :status
-        """)
-    boolean existsByGroupPurchaseIdAndStatus(
-            @Param("groupPurchaseId") Long groupPurchaseId,
-            @Param("status") Order.Status status
-    );
+    @Query("SELECT CASE WHEN COUNT(o) > 0 THEN true ELSE false END FROM Order o WHERE o.groupPurchase.id = :groupPurchaseId")
+    boolean existsByGroupPurchaseId(@Param("groupPurchaseId") Long groupPurchaseId);
 
     @Query("""
             SELECT o FROM Order o
@@ -141,6 +130,67 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("orderId") Long orderId
     );
 
+    @Query("""
+            SELECT SUM(o.quantity)
+            FROM Order o
+            WHERE o.groupPurchase.id = :groupPurchaseId
+              AND (
+                    o.status = com.siheung.hanbaguni.entity.Order.Status.PAID
+                    OR o.status = com.siheung.hanbaguni.entity.Order.Status.PAYMENT_PENDING
+                    OR (
+                        o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
+                        AND (o.reservedUntil IS NULL OR o.reservedUntil > :now)
+                    )
+              )
+            GROUP BY o.user.id
+            """)
+    List<Long> findActiveUserQuantities(
+            @Param("groupPurchaseId") Long groupPurchaseId,
+            @Param("now") LocalDateTime now
+    );
+
+    @Query("""
+            select case when count(o) > 0 then true else false end from Order o
+            where o.groupPurchase.id = :groupId and o.status = :status
+            """)
+    boolean hasOrdersInStatus(@Param("groupId") Long groupId, @Param("status") Order.Status status);
+
+    @Query("""
+            SELECT MAX(o.reservedUntil)
+            FROM Order o
+            WHERE o.groupPurchase.id = :groupPurchaseId
+              AND o.status = com.siheung.hanbaguni.entity.Order.Status.PENDING
+              AND o.reservedUntil > :now
+            """)
+    Optional<LocalDateTime> findMaxReservedUntil(
+            @Param("groupPurchaseId") Long groupPurchaseId,
+            @Param("now") LocalDateTime now
+    );
+
+    interface PendingPayment {
+        Long getOrderId();
+        Long getUserId();
+    }
+
+    @Query("""
+            select o.id as orderId, o.user.id as userId from Order o
+            where o.status = com.siheung.hanbaguni.entity.Order.Status.PAYMENT_PENDING
+              and (o.paymentRetryAt is null or o.paymentRetryAt <= :now)
+            order by o.paymentRetryAt, o.id
+            """)
+    List<PendingPayment> findDuePayments(@Param("now") LocalDateTime now,
+                                         org.springframework.data.domain.Pageable page);
+    @Query("""
+        select case when count(o) > 0 then true else false end
+        from Order o
+        where o.groupPurchase.id = :groupPurchaseId
+          and o.status = :status
+        """)
+    boolean existsByGroupPurchaseIdAndStatus(
+            @Param("groupPurchaseId") Long groupPurchaseId,
+            @Param("status") Order.Status status
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         select o
@@ -175,11 +225,4 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             @Param("pendingRefund") Order.Status pendingRefund
     );
 
-    @Query("""
-        select o.id from Order o
-        where o.status = :status and o.groupPurchase.endAt <= :now
-        order by o.id
-        """)
-    List<Long> findDuePaymentIds(@Param("status") Order.Status status,
-                                 @Param("now") LocalDateTime now);
 }

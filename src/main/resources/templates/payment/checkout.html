@@ -70,6 +70,11 @@
                     결제 결과 다시 확인
                 </button>
 
+                <form th:if="${order.status.name() == 'PENDING' and mode != 'success'}"
+                      th:action="@{/orders/{id}/cancel(id=${order.id})}" method="post">
+                    <button type="submit" class="btn btn-outline-danger">예약 취소하고 수량 반환</button>
+                </form>
+
                 <a class="btn btn-outline-secondary"
                    th:href="@{/orders/{id}(id=${order.id})}">
                     주문 상세

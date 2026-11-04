@@ -44,6 +44,9 @@ class RefundFlowTest {
     GroupClosingJob closingJob;
 
     @Autowired
+    PaymentService payments;
+
+    @Autowired
     EntityManager em;
 
     @Autowired
@@ -454,7 +457,10 @@ class RefundFlowTest {
         closingJob.runOnce(deadline);
         tx.executeWithoutResult(s -> assertThat(em.find(GroupPurchase.class, fixture.groupId()).getStatus())
                 .isEqualTo(GroupPurchase.Status.OPEN));
-        when(gateway.find(key)).thenReturn(new PaymentData.Receipt(key, ref, 3000, "KRW", "DONE"));
+        when(gateway.findByOrderId(ref)).thenReturn(new PaymentData.Receipt(key, ref, 3000, "KRW", "DONE"));
+        Long orderId = tx.execute(s -> em.createQuery("select o.id from Order o where o.paymentOrderRef = :ref", Long.class)
+                .setParameter("ref", ref).getSingleResult());
+        payments.recover(orderId, fixture.buyerId(), deadline);
         closingJob.runOnce(deadline);
         tx.executeWithoutResult(s -> assertThat(em.find(GroupPurchase.class, fixture.groupId()).getStatus())
                 .isEqualTo(GroupPurchase.Status.SUCCESS));
