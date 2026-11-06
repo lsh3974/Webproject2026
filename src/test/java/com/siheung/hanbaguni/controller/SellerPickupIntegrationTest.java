@@ -2,6 +2,7 @@ package com.siheung.hanbaguni.controller;
 
 import com.siheung.hanbaguni.entity.*;
 import com.siheung.hanbaguni.payment.RefundService;
+import com.siheung.hanbaguni.payment.RefundTransactions;
 import com.siheung.hanbaguni.payment.TossPaymentGateway;
 import com.siheung.hanbaguni.security.LoginUser;
 import com.siheung.hanbaguni.service.PickupService;
@@ -50,6 +51,9 @@ class SellerPickupIntegrationTest {
 
     @Autowired
     private RefundService refundService;
+
+    @Autowired
+    private RefundTransactions refundTransactions;
 
     @MockitoBean
     private TossPaymentGateway gateway;
@@ -226,5 +230,145 @@ class SellerPickupIntegrationTest {
                         .with(csrf()))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(flash().attribute("errorMessage", containsString("해당 매장의 수령 건이 아닙니다")));
+    }
+
+    @Test
+    @DisplayName("2-3 방어: 수령 코드 조회 API에서 할인/변경이 적용된 실제 Order.totalPrice를 반환")
+    void testLookupApiUsesOrderTotalPrice() throws Exception {
+        User seller = new User("seller_price@test.com", "pass", "판매자P");
+        ReflectionTestUtils.setField(seller, "role", User.Role.SELLER);
+        em.persist(seller);
+
+        Store store = new Store(seller, "할인마트", "123-45-67891", "031-111-2222", "시흥시 정왕동", null, null);
+        em.persist(store);
+
+        Product product = new Product(store, "할인 쌀", "곡류", 30000, "1포", "맛있는 쌀", null);
+        em.persist(product);
+
+        LocalDateTime now = LocalDateTime.now();
+        GroupPurchase gp = new GroupPurchase(
+                store, product, "쌀 공구",
+                25000, 2, 20, 5,
+                now.minusDays(1), now.plusDays(2),
+                now.plusDays(3), now.plusDays(4),
+                "카운터", "안내", GroupPurchase.Status.OPEN
+        );
+        em.persist(gp);
+
+        User buyer = new User("buyer_price@test.com", "pass", "구매자P");
+        em.persist(buyer);
+
+        // 공구 단가 25,000 * 수량 2 = 50,000원이지만, 쿠폰/할인 등으로 결제 당시 확정된 주문 금액은 45,000원인 시나리오
+        Order order = new Order(buyer, gp, 2, 25000, 45000, now.plusMinutes(15));
+        ReflectionTestUtils.setField(order, "status", Order.Status.PAID);
+        em.persist(order);
+        em.flush();
+
+        Pickup pickup = pickupService.createOrGetPickupForOrder(order);
+
+        // QR 조회 API 호출 시 단가*수량(50000)이 아니라 order.totalPrice(45000)가 반환되는지 검증
+        mvc.perform(get("/seller/stores/" + store.getId() + "/pickups/api/lookup")
+                        .param("code", pickup.getPickupCode())
+                        .with(asUser(seller)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pickupCode").value(pickup.getPickupCode()))
+                .andExpect(jsonPath("$.quantity").value(2))
+                .andExpect(jsonPath("$.totalPrice").value(45000));
+    }
+
+    @Test
+    @DisplayName("2-1 방어: 공구가 FAILED 상태로 마감되더라도 이미 PICKED_UP 수령 완료된 주문은 자동 환불 차단")
+    void testAutoRefundBlockedIfPickedUp() {
+        User seller = new User("seller_failed@test.com", "pass", "판매자F");
+        ReflectionTestUtils.setField(seller, "role", User.Role.SELLER);
+        em.persist(seller);
+
+        Store store = new Store(seller, "실패마트", "123-45-67892", "031-111-3333", "시흥시 정왕동", null, null);
+        em.persist(store);
+
+        Product product = new Product(store, "배", "과일", 15000, "1박스", "배", null);
+        em.persist(product);
+
+        LocalDateTime now = LocalDateTime.now();
+        // FAILED 상태의 공동구매
+        GroupPurchase gp = new GroupPurchase(
+                store, product, "배 공구 실패건",
+                12000, 10, 50, 0,
+                now.minusDays(5), now.minusDays(1),
+                now.plusDays(1), now.plusDays(2),
+                "카운터", "안내", GroupPurchase.Status.FAILED
+        );
+        em.persist(gp);
+
+        User buyer = new User("buyer_failed@test.com", "pass", "구매자F");
+        em.persist(buyer);
+
+        Order order = new Order(buyer, gp, 1, 12000, 12000, now.minusDays(2));
+        ReflectionTestUtils.setField(order, "status", Order.Status.PAID);
+        ReflectionTestUtils.setField(order, "paymentKey", "toss_pk_failed_123");
+        em.persist(order);
+        em.flush();
+
+        // 수령증 생성 후 수령 완료(PICKED_UP) 상태로 전환
+        Pickup pickup = pickupService.createOrGetPickupForOrder(order);
+        ReflectionTestUtils.setField(pickup, "status", Pickup.Status.PICKED_UP);
+        ReflectionTestUtils.setField(pickup, "pickedUpAt", LocalDateTime.now());
+        em.flush();
+
+        // 스케줄러 자동 환불(startFailedGroupRefund) 호출 시 CONFLICT 예외로 차단되는지 검증
+        assertThatThrownBy(() -> refundTransactions.startFailedGroupRefund(order.getId()))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("이미 매장에서 수령 완료된 상품은 모집 실패 자동 환불 대상에서 제외됩니다");
+    }
+
+    @Test
+    @DisplayName("2-2 방어: 이미 PICKED_UP 처리된 수령증에 대한 중복/동시 완료 처리 시도 차단")
+    void testDoubleCompletePickupBlocked() throws Exception {
+        User seller = new User("seller_double@test.com", "pass", "판매자D");
+        ReflectionTestUtils.setField(seller, "role", User.Role.SELLER);
+        em.persist(seller);
+
+        Store store = new Store(seller, "중복마트", "123-45-67893", "031-111-4444", "시흥시 정왕동", null, null);
+        em.persist(store);
+
+        Product product = new Product(store, "포도", "과일", 8000, "1송이", "포도", null);
+        em.persist(product);
+
+        LocalDateTime now = LocalDateTime.now();
+        GroupPurchase gp = new GroupPurchase(
+                store, product, "포도 공구",
+                7000, 5, 20, 5,
+                now.minusDays(1), now.plusDays(2),
+                now.plusDays(3), now.plusDays(4),
+                "카운터", "안내", GroupPurchase.Status.OPEN
+        );
+        em.persist(gp);
+
+        User buyer = new User("buyer_double@test.com", "pass", "구매자D");
+        em.persist(buyer);
+
+        Order order = new Order(buyer, gp, 1, 7000, 7000, now.plusMinutes(15));
+        ReflectionTestUtils.setField(order, "status", Order.Status.PAID);
+        em.persist(order);
+        em.flush();
+
+        Pickup pickup = pickupService.createOrGetPickupForOrder(order);
+
+        // 첫 번째 수령 완료 처리 -> 성공
+        mvc.perform(post("/seller/stores/" + store.getId() + "/pickups/" + pickup.getId() + "/complete")
+                        .with(asUser(seller))
+                        .with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(flash().attribute("successMessage", containsString("수령 완료 처리가 완료되었습니다")));
+
+        em.flush();
+        em.clear();
+
+        // 두 번째 중복 수령 완료 처리 -> 락 획득 후 최신 상태(PICKED_UP) 재조회하여 차단
+        mvc.perform(post("/seller/stores/" + store.getId() + "/pickups/" + pickup.getId() + "/complete")
+                        .with(asUser(seller))
+                        .with(csrf()))
+                .andExpect(status().is3xxRedirection())
+                .andExpect(flash().attribute("errorMessage", containsString("이미 수령이 완료된 건입니다")));
     }
 }

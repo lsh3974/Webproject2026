@@ -191,10 +191,12 @@ class PickupServiceTest {
 
         User customer = new User("customer@test.com", "hash", "구매자1");
         Pickup pickup = new Pickup(store, gp, customer, pickupCode, 1, "구매자1", "010-1234-5678");
+        ReflectionTestUtils.setField(pickup, "id", 555L);
         pickup.markReady(); // READY 상태
 
         given(storeService.getStoreWithOwnershipCheck(storeId, sellerId)).willReturn(store);
         given(pickupRepository.findByPickupCodeAndStoreId(pickupCode, storeId)).willReturn(Optional.of(pickup));
+        given(pickupRepository.findByIdWithLock(555L)).willReturn(Optional.of(pickup));
 
         // when
         Pickup completed = pickupService.markPickedUpByCode(pickupCode, storeId, sellerId);
@@ -263,6 +265,7 @@ class PickupServiceTest {
         ReflectionTestUtils.setField(pickup, "id", 1001L);
 
         given(pickupRepository.findById(1001L)).willReturn(Optional.of(pickup));
+        given(pickupRepository.findByIdWithLock(1001L)).willReturn(Optional.of(pickup));
 
         // when & then
         assertThatThrownBy(() -> pickupService.markPickedUp(1001L, sellerId))

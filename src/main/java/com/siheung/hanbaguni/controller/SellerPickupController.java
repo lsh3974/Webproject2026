@@ -86,7 +86,14 @@ public class SellerPickupController {
             data.put("productName", p.getGroupPurchase().getProduct().getName());
             data.put("groupTitle", p.getGroupPurchase().getTitle());
             data.put("quantity", p.getQuantity());
-            data.put("totalPrice", p.getGroupPurchase().getGroupPrice() * p.getQuantity());
+
+            // 2-3 반영: 실제 주문이 연결된 건은 결제 당시 확정된 Order.totalPrice를 사용하고,
+            // 주문이 없는 시연용 수령 건에 대해서만 현재 공구 가격 * 수량을 계산합니다.
+            int totalPrice = (p.getOrder() != null && p.getOrder().getTotalPrice() != null)
+                    ? p.getOrder().getTotalPrice()
+                    : p.getGroupPurchase().getGroupPrice() * p.getQuantity();
+            data.put("totalPrice", totalPrice);
+
             data.put("customerName", p.getCustomerName() != null ? p.getCustomerName() : (p.getCustomer() != null ? p.getCustomer().getDisplayName() : "구매자"));
             data.put("customerPhone", maskPhoneNumber(p.getCustomerPhone()));
             data.put("status", p.getStatus().name());
@@ -146,7 +153,7 @@ public class SellerPickupController {
     }
 
     @PostMapping("/scan-complete")
-    public String markPickedUpByScan(
+    public String markPickedUpByCode(
             @PathVariable Long storeId,
             @RequestParam("pickupCode") String pickupCode,
             @AuthenticationPrincipal LoginUser loginUser,
@@ -174,12 +181,18 @@ public class SellerPickupController {
             @AuthenticationPrincipal LoginUser loginUser,
             RedirectAttributes redirectAttributes) {
 
-        Store store = storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
-        GroupPurchase gp = groupPurchaseService.getWithStoreAndOwnershipCheck(storeId, groupPurchaseId, loginUser.getUserId());
-        User sellerUser = userRepository.findById(loginUser.getUserId()).orElse(null);
+        try {
+            Store store = storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
+            GroupPurchase gp = groupPurchaseService.getWithStoreAndOwnershipCheck(storeId, groupPurchaseId, loginUser.getUserId());
+            User sellerUser = userRepository.findById(loginUser.getUserId()).orElse(null);
 
-        Pickup pickup = pickupService.createTestPickup(store, gp, sellerUser, quantity, customerName, customerPhone);
-        redirectAttributes.addFlashAttribute("successMessage", "테스트용 수령증이 발급되었습니다. (수령코드: " + pickup.getPickupCode() + ")");
+            Pickup pickup = pickupService.createTestPickup(store, gp, sellerUser, quantity, customerName, customerPhone);
+            redirectAttributes.addFlashAttribute("successMessage", "테스트용 수령증이 발급되었습니다. (수령코드: " + pickup.getPickupCode() + ")");
+        } catch (ResponseStatusException e) {
+            redirectAttributes.addFlashAttribute("errorMessage", e.getReason());
+        } catch (Exception e) {
+            redirectAttributes.addFlashAttribute("errorMessage", "테스트 수령증 생성 오류: " + e.getMessage());
+        }
         return "redirect:/seller/stores/" + storeId + "/pickups";
     }
 }

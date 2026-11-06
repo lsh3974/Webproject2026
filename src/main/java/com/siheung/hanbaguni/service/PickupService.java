@@ -8,6 +8,8 @@ import com.siheung.hanbaguni.entity.User;
 import com.siheung.hanbaguni.repository.GroupPurchaseRepository;
 import com.siheung.hanbaguni.repository.OrderRepository;
 import com.siheung.hanbaguni.repository.PickupRepository;
+import jakarta.persistence.EntityManager;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,16 +33,28 @@ public class PickupService {
     private final StoreService storeService;
     private final OrderRepository orderRepository;
     private final GroupPurchaseRepository groupPurchaseRepository;
+    private final EntityManager entityManager;
 
     public PickupService(
             PickupRepository pickupRepository,
             StoreService storeService,
             OrderRepository orderRepository,
             GroupPurchaseRepository groupPurchaseRepository) {
+        this(pickupRepository, storeService, orderRepository, groupPurchaseRepository, null);
+    }
+
+    @Autowired
+    public PickupService(
+            PickupRepository pickupRepository,
+            StoreService storeService,
+            OrderRepository orderRepository,
+            GroupPurchaseRepository groupPurchaseRepository,
+            @Autowired(required = false) EntityManager entityManager) {
         this.pickupRepository = pickupRepository;
         this.storeService = storeService;
         this.orderRepository = orderRepository;
         this.groupPurchaseRepository = groupPurchaseRepository;
+        this.entityManager = entityManager;
     }
 
     public List<Pickup> findByStoreId(Long storeId, Long sellerId) {
@@ -86,23 +100,32 @@ public class PickupService {
             throw new IllegalStateException("결제 완료(PAID) 상태인 주문만 수령증을 발급할 수 있습니다.");
         }
 
-        Optional<Pickup> existing = pickupRepository.findByOrderId(order.getId());
+        Optional<Pickup> existing = order.getId() != null ? pickupRepository.findByOrderId(order.getId()) : Optional.empty();
         if (existing.isPresent()) {
             return existing.get();
         }
 
-        String code = generateUniquePickupCode();
+        String pickupCode = generateUniquePickupCode();
+        String customerName = order.getUser() != null ? order.getUser().getDisplayName() : "구매자";
+        String customerPhone = order.getUser() != null ? order.getUser().getPhoneE164() : "";
+
         Pickup pickup = new Pickup(
                 order,
                 order.getGroupPurchase().getStore(),
                 order.getGroupPurchase(),
                 order.getUser(),
-                code,
+                pickupCode,
                 order.getQuantity(),
-                order.getUser() != null ? order.getUser().getDisplayName() : "구매자",
-                order.getUser() != null ? order.getUser().getPhoneE164() : null
+                customerName,
+                customerPhone
         );
-        return pickupRepository.saveAndFlush(pickup);
+
+        try {
+            return pickupRepository.saveAndFlush(pickup);
+        } catch (Exception e) {
+            return pickupRepository.findByOrderId(order.getId())
+                    .orElseThrow(() -> new IllegalStateException("수령증 생성 중 동시성 오류가 발생했습니다.", e));
+        }
     }
 
     @Transactional
@@ -147,8 +170,9 @@ public class PickupService {
     }
 
     /**
-     * 환불 요청(RefundTransactions)과 동일한 잠금 순서(GroupPurchase -> Order)를 적용하여
-     * 환불과 수령 완료가 동시에 일어나는 경쟁 상태(Race Condition)를 원자적으로 방어합니다.
+     * 환불 요청(RefundTransactions)과 동일한 잠금 순서를 적용하여
+     * 환불과 수령 완료가 동시에 일어나는 경쟁 상태(Race Condition)를 원자적으로 방어합니다:
+     * GroupPurchase (비관적 락) -> Order (비관적 락) -> Pickup (비관적 락 및 최신 상태 재조회)
      */
     private void completePickupWithLock(Pickup pickup) {
         if (pickup.getOrder() != null) {
@@ -177,9 +201,26 @@ public class PickupService {
             }
         }
 
+        // 3. 2-2 피드백 반영: Pickup 행 자체도 비관적 락으로 최신 상태를 재조회하여 중복 수령 완료 경쟁 방어
+        Pickup lockedPickup = pickupRepository.findByIdWithLock(pickup.getId())
+                .orElse(pickup);
+
+        // 1차 캐시 최신화: 락을 획득하기 위해 대기하다가 깨어났을 때 커밋된 최신 DB 상태로 엔티티를 동기화
+        if (entityManager != null && entityManager.contains(lockedPickup)) {
+            entityManager.refresh(lockedPickup);
+        }
+
+        // 이미 완료되었거나 취소된 건인지 최신 DB 상태 검증
+        if (lockedPickup.getStatus() == Pickup.Status.PICKED_UP) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "이미 수령이 완료된 건입니다.");
+        }
+        if (lockedPickup.getStatus() == Pickup.Status.CANCELLED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "취소된 건은 수령할 수 없습니다.");
+        }
+
         try {
-            pickup.markPickedUp();
-            pickupRepository.saveAndFlush(pickup);
+            lockedPickup.markPickedUp();
+            pickupRepository.saveAndFlush(lockedPickup);
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }

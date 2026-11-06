@@ -90,6 +90,13 @@ public class RefundTransactions {
             );
         }
 
+        // 2-1 방어: 이미 매장에서 상품을 수령(PICKED_UP)한 주문은 자동 환불 대상에서 제외 (금전/상품 중복 지급 방지)
+        pickups.findByOrderId(orderId).ifPresent(p -> {
+            if (p.getStatus() == Pickup.Status.PICKED_UP) {
+                throw conflict("이미 매장에서 수령 완료된 상품은 모집 실패 자동 환불 대상에서 제외됩니다.");
+            }
+        });
+
         return start(
                 order,
                 "공동구매 목표 수량 미달로 인한 전액 환불"

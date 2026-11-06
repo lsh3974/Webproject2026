@@ -43,14 +43,14 @@ public class Pickup {
     @Column(nullable = false, length = 20)
     private Status status = Status.PREPARING;
 
-    @Column(name = "customer_name", length = 100)
-    private String customerName;
-
-    @Column(name = "customer_phone", length = 20)
-    private String customerPhone;
-
     @Column(name = "picked_up_at")
     private LocalDateTime pickedUpAt;
+
+    @Column(name = "customer_name", length = 50)
+    private String customerName;
+
+    @Column(name = "customer_phone", length = 30)
+    private String customerPhone;
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;

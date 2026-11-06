@@ -50,7 +50,7 @@
                 <a th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}" class="btn btn-outline-secondary">
                     공동구매 목록
                 </a>
-                <button type="button" class="btn btn-primary" data-bs-toggle="collapse" data-bs-target="#testOrderBox">
+                <button type="button" class="btn btn-primary" id="btnToggleTestOrderBox">
                     + 테스트용 주문(수령건) 생성
                 </button>
             </div>
@@ -65,7 +65,14 @@
                 <p class="text-muted small mb-3">
                     결제 연동 전에도 수령 관리(준비완료, QR 스캔, 수령완료) 흐름을 확인해볼 수 있는 개발자 편의 기능입니다.
                 </p>
-                <form method="post"
+                <div th:if="${#lists.isEmpty(groupPurchases)}" class="alert alert-warning small py-2 mb-0">
+                    ⚠️ 현재 매장에 등록된 공동구매가 없습니다.
+                    <a th:href="@{/seller/stores/{id}/group-purchases/new(id=${store.id})}" class="alert-link fw-semibold ms-1">
+                        공동구매를 먼저 등록해주세요.
+                    </a>
+                </div>
+                <form th:unless="${#lists.isEmpty(groupPurchases)}"
+                      method="post"
                       th:action="@{/seller/stores/{storeId}/pickups/mock-create(storeId=${store.id})}"
                       class="row g-2 align-items-end">
                     <div class="col-md-4">
@@ -206,11 +213,11 @@
             <table class="table align-middle table-hover mb-0">
                 <thead class="table-light small">
                 <tr>
-                    <th style="width: 15%;">수령 코드</th>
+                    <th style="width: 20%;">수령 코드</th>
                     <th style="width: 25%;">상품 / 공동구매</th>
                     <th style="width: 10%;">수량</th>
-                    <th style="width: 20%;">구매자 정보</th>
-                    <th style="width: 15%;">진행 상태</th>
+                    <th style="width: 18%;">구매자 정보</th>
+                    <th style="width: 12%;">진행 상태</th>
                     <th style="width: 15%;" class="text-end">관리 작업</th>
                 </tr>
                 </thead>
@@ -218,10 +225,10 @@
                 <tr th:each="p : ${pickups}">
                     <td>
                         <strong class="font-monospace text-primary" th:text="${p.pickupCode}">PK-1234</strong>
-                        <button type="button" class="btn btn-link btn-sm p-0 ms-1 text-decoration-none btn-show-qr"
+                        <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 ms-1 btn-show-qr"
                                 th:data-code="${p.pickupCode}"
                                 th:data-title="${p.groupPurchase.product.name}">
-                            [QR보기]
+                            QR보기
                         </button>
                     </td>
                     <td>
@@ -230,8 +237,8 @@
                     </td>
                     <td th:text="${p.quantity} + '개'">1개</td>
                     <td>
-                        <div th:text="${p.customerName}">고객명</div>
-                        <div class="text-muted small" th:text="${p.customerPhone}">010-0000-0000</div>
+                        <div class="fw-semibold" th:text="${p.customerName != null && !p.customerName.isBlank() ? p.customerName : (p.customer != null ? p.customer.displayName : '구매자')}">고객명</div>
+                        <div class="text-muted small" th:text="${p.customerPhone != null && !p.customerPhone.isBlank() ? p.customerPhone : (p.customer != null && p.customer.phoneE164 != null ? p.customer.phoneE164 : '-')}">010-0000-0000</div>
                     </td>
                     <td>
                         <span th:if="${p.status.name() == 'PREPARING'}" class="badge bg-warning text-dark">준비중</span>
@@ -270,14 +277,14 @@
 </main>
 
 <!-- QR 코드 확인 팝업 (테스트 확인용) -->
-<div class="modal fade" id="qrModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="qrModal" tabindex="-1" aria-hidden="true" style="background-color: rgba(0,0,0,0.5);">
     <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content text-center p-3">
+        <div class="modal-content text-center p-3 shadow">
             <h5 class="fw-bold mb-2" id="qrModalTitle">수령 QR 코드</h5>
             <div id="qrcodeCanvas" class="d-flex justify-content-center my-3"></div>
             <div class="bg-light p-2 rounded mb-3">
                 <span class="small text-muted d-block">수령 코드</span>
-                <strong class="font-monospace fs-6" id="qrModalCode">PK-0000</strong>
+                <strong class="font-monospace fs-6 text-primary" id="qrModalCode">PK-0000</strong>
             </div>
             <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">닫기</button>
         </div>
@@ -285,9 +292,9 @@
 </div>
 
 <!-- QR 스캔 성공 시 정보 확인 및 수령확정 모달 -->
-<div class="modal fade" id="scanResultModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="scanResultModal" tabindex="-1" aria-hidden="true" style="background-color: rgba(0,0,0,0.5);">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
+        <div class="modal-content shadow">
             <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title fw-bold">🎯 QR 코드 인식 결과</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -332,14 +339,114 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
-        integrity="sha384-FKmEsmbLpC+WvEsmbLpC+WvEsmbLpC+WvEsmbLpC+WvEsmbLpC+WvEsmbLpC+Wv" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
 
 <script th:inline="javascript">
     document.addEventListener('DOMContentLoaded', function () {
         const storeId = /*[[${store.id}]]*/ 1;
         let html5QrcodeScanner = null;
 
+        // [기능 1] + 테스트용 주문(수령건) 생성 펼침/접힘 토글 (Vanilla JS fallback)
+        const btnToggleTest = document.getElementById('btnToggleTestOrderBox');
+        const testOrderBox = document.getElementById('testOrderBox');
+        if (btnToggleTest && testOrderBox) {
+            btnToggleTest.addEventListener('click', function(e) {
+                e.preventDefault();
+                const isHidden = testOrderBox.style.display === 'none' || !testOrderBox.classList.contains('show');
+                if (isHidden) {
+                    testOrderBox.style.display = 'block';
+                    testOrderBox.classList.add('show');
+                } else {
+                    testOrderBox.style.display = 'none';
+                    testOrderBox.classList.remove('show');
+                }
+            });
+        }
+
+        // [기능 2] QR 코드 확인 모달 표시 및 닫기
+        const qrCanvas = document.getElementById('qrcodeCanvas');
+        const qrModalEl = document.getElementById('qrModal');
+
+        function openQrModal() {
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                try {
+                    const modal = bootstrap.Modal.getOrCreateInstance(qrModalEl);
+                    modal.show();
+                    return;
+                } catch (e) {
+                    console.warn('Bootstrap modal show failed, falling back to vanilla:', e);
+                }
+            }
+            // Vanilla JS 모달 오픈 fallback
+            qrModalEl.classList.add('show');
+            qrModalEl.style.display = 'block';
+            qrModalEl.removeAttribute('aria-hidden');
+            qrModalEl.setAttribute('aria-modal', 'true');
+        }
+
+        function closeQrModal() {
+            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                try {
+                    const modal = bootstrap.Modal.getInstance(qrModalEl);
+                    if (modal) modal.hide();
+                } catch (e) {}
+            }
+            qrModalEl.classList.remove('show');
+            qrModalEl.style.display = 'none';
+            qrModalEl.setAttribute('aria-hidden', 'true');
+            qrModalEl.removeAttribute('aria-modal');
+        }
+
+        document.querySelectorAll('#qrModal [data-bs-dismiss="modal"]').forEach(b => {
+            b.addEventListener('click', closeQrModal);
+        });
+
+        // [QR보기] 버튼 클릭 시 QR 코드 생성 및 모달 팝업
+        document.querySelectorAll('.btn-show-qr').forEach(btn => {
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                const code = this.getAttribute('data-code');
+                const title = this.getAttribute('data-title') || '공동구매 상품';
+                document.getElementById('qrModalTitle').textContent = title + ' 수령 QR';
+                document.getElementById('qrModalCode').textContent = code;
+
+                qrCanvas.innerHTML = '';
+                let rendered = false;
+
+                // 1순위: qrcode.js 라이브러리 사용
+                if (typeof QRCode !== 'undefined') {
+                    try {
+                        new QRCode(qrCanvas, {
+                            text: code,
+                            width: 180,
+                            height: 180,
+                            colorDark: '#198754',
+                            colorLight: '#ffffff',
+                            correctLevel: QRCode.CorrectLevel.H
+                        });
+                        rendered = true;
+                    } catch (err) {
+                        console.warn('QRCode JS render error:', err);
+                        rendered = false;
+                    }
+                }
+
+                // 2순위: 이미지 QR API fallback (인터넷/라이브러리 로딩 지연 시 무조건 표시)
+                if (!rendered) {
+                    const qrImg = document.createElement('img');
+                    qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(code);
+                    qrImg.alt = code;
+                    qrImg.width = 180;
+                    qrImg.height = 180;
+                    qrImg.className = 'img-thumbnail';
+                    qrCanvas.appendChild(qrImg);
+                }
+
+                openQrModal();
+            });
+        });
+
+        // [기능 3] QR 카메라 스캐너 동작
         const btnStart = document.getElementById('btnStartScan');
         const btnStop = document.getElementById('btnStopScan');
         const scanStatus = document.getElementById('scanStatus');
@@ -350,7 +457,6 @@
                 html5QrcodeScanner.pause();
             }
 
-            // API 조회
             fetch('/seller/stores/' + storeId + '/pickups/api/lookup?code=' + encodeURIComponent(decodedText.trim()))
                 .then(res => {
                     if (!res.ok) throw new Error('해당 수령 건을 찾을 수 없습니다.');
@@ -363,13 +469,13 @@
                     document.getElementById('scanHiddenCode').value = data.pickupCode;
                     document.getElementById('scanModalCustomer').textContent = data.customerName + (data.customerPhone ? ' (' + data.customerPhone + ')' : '');
                     document.getElementById('scanModalQuantity').textContent = data.quantity + '개';
-                    document.getElementById('scanModalPrice').textContent = data.totalPrice.toLocaleString() + '원';
+                    document.getElementById('scanModalPrice').textContent = (data.totalPrice || 0).toLocaleString() + '원';
 
                     const badge = document.getElementById('scanModalStatusBadge');
                     const confirmBtn = document.getElementById('btnScanConfirm');
                     if (data.status === 'PICKED_UP') {
                         badge.className = 'badge bg-success mb-2';
-                        badge.textContent = '이미 수령 완료됨 (' + data.pickedUpAt + ')';
+                        badge.textContent = '이미 수령 완료됨 (' + (data.pickedUpAt || '') + ')';
                         confirmBtn.disabled = true;
                         confirmBtn.textContent = '이미 완료된 건입니다';
                     } else if (data.status === 'CANCELLED') {
@@ -384,8 +490,13 @@
                         confirmBtn.textContent = '상품 인도 및 수령 완료 확정';
                     }
 
-                    const scanModal = new bootstrap.Modal(document.getElementById('scanResultModal'));
-                    scanModal.show();
+                    const scanModalEl = document.getElementById('scanResultModal');
+                    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                        bootstrap.Modal.getOrCreateInstance(scanModalEl).show();
+                    } else {
+                        scanModalEl.classList.add('show');
+                        scanModalEl.style.display = 'block';
+                    }
                 })
                 .catch(err => {
                     alert('QR 조회 오류: ' + err.message);
@@ -395,56 +506,42 @@
                 });
         }
 
-        btnStart.addEventListener('click', function () {
-            if (!html5QrcodeScanner) {
-                html5QrcodeScanner = new Html5Qrcode("qr-reader");
-            }
-            scanStatus.textContent = '카메라 준비 중입니다...';
-            html5QrcodeScanner.start(
-                { facingMode: "environment" },
-                { fps: 10, qrbox: { width: 250, height: 250 } },
-                onScanSuccess
-            ).then(() => {
-                scanStatus.textContent = '카메라 작동 중: QR 코드를 비춰주세요.';
-                btnStart.disabled = true;
-                btnStop.disabled = false;
-            }).catch(err => {
-                scanStatus.textContent = '카메라 오류: ' + err;
-                alert('카메라를 찾을 수 없거나 권한이 없는 환경입니다. 수동 수령 코드를 입력해주세요.');
-            });
-        });
-
-        btnStop.addEventListener('click', function () {
-            if (html5QrcodeScanner) {
-                html5QrcodeScanner.stop().then(() => {
-                    scanStatus.textContent = '카메라가 중단되었습니다.';
-                    btnStart.disabled = false;
-                    btnStop.disabled = true;
+        if (btnStart) {
+            btnStart.addEventListener('click', function () {
+                if (typeof Html5Qrcode === 'undefined') {
+                    alert('QR 스캐너 라이브러리를 불러오지 못했습니다. 카메라 사용이 불가하면 수동 번호 조회를 이용해주세요.');
+                    return;
+                }
+                if (!html5QrcodeScanner) {
+                    html5QrcodeScanner = new Html5Qrcode("qr-reader");
+                }
+                scanStatus.textContent = '카메라 준비 중입니다...';
+                html5QrcodeScanner.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    onScanSuccess
+                ).then(() => {
+                    scanStatus.textContent = '카메라 작동 중: QR 코드를 비춰주세요.';
+                    btnStart.disabled = true;
+                    btnStop.disabled = false;
+                }).catch(err => {
+                    scanStatus.textContent = '카메라 오류: ' + err;
+                    alert('카메라를 찾을 수 없거나 권한이 없는 환경입니다. 수동 수령 코드를 입력해주세요.');
                 });
-            }
-        });
-
-        // 모달 QR 코드 동적 렌더링 (테스트 화면용 QR 보기)
-        const qrCanvas = document.getElementById('qrcodeCanvas');
-        let qrcodeObj = null;
-        document.querySelectorAll('.btn-show-qr').forEach(btn => {
-            btn.addEventListener('click', function () {
-                const code = this.getAttribute('data-code');
-                const title = this.getAttribute('data-title');
-                document.getElementById('qrModalTitle').textContent = title + ' 수령 QR';
-                document.getElementById('qrModalCode').textContent = code;
-
-                qrCanvas.innerHTML = '';
-                new QRCode(qrCanvas, {
-                    text: code,
-                    width: 180,
-                    height: 180
-                });
-
-                const modal = new bootstrap.Modal(document.getElementById('qrModal'));
-                modal.show();
             });
-        });
+        }
+
+        if (btnStop) {
+            btnStop.addEventListener('click', function () {
+                if (html5QrcodeScanner) {
+                    html5QrcodeScanner.stop().then(() => {
+                        scanStatus.textContent = '카메라가 중단되었습니다.';
+                        btnStart.disabled = false;
+                        btnStop.disabled = true;
+                    });
+                }
+            });
+        }
     });
 </script>
 </body>
