@@ -41,6 +41,9 @@ class PickupServiceTest {
     @Mock
     private GroupPurchaseRepository groupPurchaseRepository;
 
+    @Mock
+    private jakarta.persistence.EntityManager entityManager;
+
     @InjectMocks
     private PickupService pickupService;
 
@@ -65,6 +68,9 @@ class PickupServiceTest {
         ReflectionTestUtils.setField(order, "id", 500L);
         ReflectionTestUtils.setField(order, "status", Order.Status.PAID);
 
+        ReflectionTestUtils.setField(gp, "id", 333L);
+        given(groupPurchaseRepository.findByIdWithLock(333L)).willReturn(Optional.of(gp));
+        given(orderRepository.findPaymentOrderWithLock(500L)).willReturn(Optional.of(order));
         given(pickupRepository.findByOrderId(500L)).willReturn(Optional.empty());
         given(pickupRepository.saveAndFlush(any(Pickup.class))).willAnswer(inv -> inv.getArgument(0));
 
@@ -196,6 +202,8 @@ class PickupServiceTest {
 
         given(storeService.getStoreWithOwnershipCheck(storeId, sellerId)).willReturn(store);
         given(pickupRepository.findByPickupCodeAndStoreId(pickupCode, storeId)).willReturn(Optional.of(pickup));
+        ReflectionTestUtils.setField(gp, "id", 333L);
+        given(groupPurchaseRepository.findByIdWithLock(333L)).willReturn(Optional.of(gp));
         given(pickupRepository.findByIdWithLock(555L)).willReturn(Optional.of(pickup));
 
         // when
@@ -261,10 +269,13 @@ class PickupServiceTest {
 
         User customer = new User("customer@test.com", "hash", "구매자1");
         Pickup pickup = new Pickup(store, gp, customer, "PK-TEST", 1, "구매자1", "010-1234-5678");
+        pickup.markReady();
         pickup.markPickedUp(); // 이미 수령 완료된 상태
         ReflectionTestUtils.setField(pickup, "id", 1001L);
 
         given(pickupRepository.findById(1001L)).willReturn(Optional.of(pickup));
+        ReflectionTestUtils.setField(gp, "id", 333L);
+        given(groupPurchaseRepository.findByIdWithLock(333L)).willReturn(Optional.of(gp));
         given(pickupRepository.findByIdWithLock(1001L)).willReturn(Optional.of(pickup));
 
         // when & then

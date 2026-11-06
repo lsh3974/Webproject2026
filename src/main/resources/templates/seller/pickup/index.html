@@ -175,15 +175,16 @@
                             ❌ 취소/환불된 수령증입니다. 상품을 인도할 수 없습니다.
                         </div>
 
-                        <div th:if="${searchedPickup.status.name() == 'PREPARING' or searchedPickup.status.name() == 'READY'}" class="d-flex gap-2 mt-3">
-                            <form th:if="${searchedPickup.status.name() == 'PREPARING'}"
+                        <div th:if="${searchedPickup.canMarkReady() or searchedPickup.canComplete()}" class="d-flex gap-2 mt-3">
+                            <form th:if="${searchedPickup.canMarkReady()}"
                                   th:action="@{/seller/stores/{storeId}/pickups/{id}/ready(storeId=${store.id}, id=${searchedPickup.id})}"
                                   method="post" class="flex-fill m-0">
                                 <button type="submit" class="btn btn-info btn-sm w-100 fw-semibold">
                                     상품 준비완료 처리
                                 </button>
                             </form>
-                            <form th:action="@{/seller/stores/{storeId}/pickups/{id}/complete(storeId=${store.id}, id=${searchedPickup.id})}"
+                            <form th:if="${searchedPickup.canComplete()}"
+                                  th:action="@{/seller/stores/{storeId}/pickups/{id}/complete(storeId=${store.id}, id=${searchedPickup.id})}"
                                   method="post" class="flex-fill m-0">
                                 <button type="submit" class="btn btn-success btn-sm w-100 fw-semibold"
                                         onclick="return confirm('고객에게 상품을 인도하고 수령완료 처리하시겠습니까?');">
@@ -249,15 +250,12 @@
                              th:text="${#temporals.format(p.pickedUpAt, 'MM/dd HH:mm')}"></div>
                     </td>
                     <td class="text-end">
-                        <div th:if="${p.status.name() == 'PREPARING'}" class="d-flex justify-content-end gap-1">
+                        <div th:if="${p.canMarkReady()}" class="d-flex justify-content-end gap-1">
                             <form th:action="@{/seller/stores/{storeId}/pickups/{id}/ready(storeId=${store.id}, id=${p.id})}" method="post">
                                 <button type="submit" class="btn btn-outline-info btn-sm">준비완료</button>
                             </form>
-                            <form th:action="@{/seller/stores/{storeId}/pickups/{id}/complete(storeId=${store.id}, id=${p.id})}" method="post">
-                                <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('수령완료 처리하시겠습니까?');">수령완료</button>
-                            </form>
                         </div>
-                        <div th:if="${p.status.name() == 'READY'}" class="d-flex justify-content-end">
+                        <div th:if="${p.canComplete()}" class="d-flex justify-content-end">
                             <form th:action="@{/seller/stores/{storeId}/pickups/{id}/complete(storeId=${store.id}, id=${p.id})}" method="post">
                                 <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('수령완료 처리하시겠습니까?');">수령완료 확정</button>
                             </form>
@@ -486,8 +484,8 @@
                     } else {
                         badge.className = data.status === 'READY' ? 'badge bg-info text-dark mb-2' : 'badge bg-warning text-dark mb-2';
                         badge.textContent = data.status === 'READY' ? '수령대기 (준비완료)' : '준비중';
-                        confirmBtn.disabled = false;
-                        confirmBtn.textContent = '상품 인도 및 수령 완료 확정';
+                        confirmBtn.disabled = !data.canComplete;
+                        confirmBtn.textContent = data.canComplete ? '상품 인도 및 수령 완료 확정' : '아직 수령할 수 없습니다';
                     }
 
                     const scanModalEl = document.getElementById('scanResultModal');

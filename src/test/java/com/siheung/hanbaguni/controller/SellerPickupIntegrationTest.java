@@ -62,6 +62,120 @@ class SellerPickupIntegrationTest {
         return user(new LoginUser(user));
     }
 
+    @Autowired
+    private org.springframework.transaction.PlatformTransactionManager txManager;
+
+    @Autowired
+    private com.siheung.hanbaguni.payment.GroupClosingTransactions closing;
+
+    private record ReviewFixture(Long pickupId, Long storeId, Long sellerId, Long groupId, Long orderId) {}
+
+    private ReviewFixture reviewFixture(GroupPurchase.Status status) {
+        String key = java.util.UUID.randomUUID().toString();
+        User seller = new User("seller-" + key + "@test.com", "unused", "판매자-" + key);
+        User buyer = new User("buyer-" + key + "@test.com", "unused", "구매자-" + key);
+        em.persist(seller);
+        em.persist(buyer);
+        Store store = new Store(seller, "검토 매장", null, "031-123-4567", "시흥", null, null);
+        em.persist(store);
+        Product product = new Product(store, "상품", "과일", 2000, "개", "설명", null);
+        em.persist(product);
+        LocalDateTime now = LocalDateTime.now();
+        GroupPurchase group = new GroupPurchase(store, product, "검토 공동구매", 1000, 5, 20, 10,
+                now.minusDays(1), now.plusDays(1), now.minusMinutes(5), now.plusDays(2),
+                null, null, status);
+        em.persist(group);
+        Order order = new Order(buyer, group, 2, 1000, 2000, now.plusMinutes(15));
+        order.assignPaymentOrderRef(key);
+        order.beginPayment(now);
+        order.markPaid("test-" + key);
+        group.addPaidQuantity(2);
+        em.persist(order);
+        Pickup pickup = pickupService.createOrGetPickupForOrder(order);
+        return new ReviewFixture(pickup.getId(), store.getId(), seller.getId(), group.getId(), order.getId());
+    }
+
+    @Test
+    void 모집중에는_수령을_차단하고_마감_실패_환불을_허용한다() {
+        ReviewFixture data = reviewFixture(GroupPurchase.Status.OPEN);
+        assertThatThrownBy(() -> pickupService.markReady(data.pickupId(), data.storeId(), data.sellerId()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("모집에 성공한");
+        assertThatThrownBy(() -> pickupService.markPickedUp(data.pickupId(), data.storeId(), data.sellerId()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("모집에 성공한");
+        assertThat(closing.closeIfDue(data.groupId(), LocalDateTime.now().plusDays(2))).isTrue();
+        assertThat(refundTransactions.startFailedGroupRefund(data.orderId()).orderId()).isEqualTo(data.orderId());
+    }
+
+    @Test
+    void 준비중_수령증은_QR로_수령완료할_수_없다() {
+        ReviewFixture data = reviewFixture(GroupPurchase.Status.SUCCESS);
+        String code = em.find(Pickup.class, data.pickupId()).getPickupCode();
+        assertThatThrownBy(() -> pickupService.markPickedUpByCode(code, data.storeId(), data.sellerId()))
+                .isInstanceOf(ResponseStatusException.class).hasMessageContaining("준비완료된 건만");
+        assertThat(em.find(Pickup.class, data.pickupId()).getStatus()).isEqualTo(Pickup.Status.PREPARING);
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void 늦게_저장된_준비완료_요청은_수령완료를_되돌리지_않는다() {
+        var tx = new org.springframework.transaction.support.TransactionTemplate(txManager);
+        var isolated = new org.springframework.transaction.support.TransactionTemplate(txManager);
+        isolated.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        ReviewFixture data = tx.execute(s -> reviewFixture(GroupPurchase.Status.SUCCESS));
+        assertThatThrownBy(() -> tx.executeWithoutResult(s -> {
+            assertThat(em.find(Pickup.class, data.pickupId()).getStatus()).isEqualTo(Pickup.Status.PREPARING);
+            isolated.executeWithoutResult(other -> {
+                pickupService.markReady(data.pickupId(), data.storeId(), data.sellerId());
+                pickupService.markPickedUp(data.pickupId(), data.storeId(), data.sellerId());
+            });
+            pickupService.markReady(data.pickupId(), data.storeId(), data.sellerId());
+        })).isInstanceOf(ResponseStatusException.class).hasMessageContaining("이미 수령 완료된 건");
+        tx.executeWithoutResult(s -> {
+            Pickup pickup = em.find(Pickup.class, data.pickupId());
+            assertThat(pickup.getStatus()).isEqualTo(Pickup.Status.PICKED_UP);
+            assertThat(pickup.getPickedUpAt()).isNotNull();
+        });
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void 동일_주문의_동시_발급은_하나의_수령증을_반환한다() throws Exception {
+        var tx = new org.springframework.transaction.support.TransactionTemplate(txManager);
+        var data = tx.execute(s -> {
+            ReviewFixture fixture = reviewFixture(GroupPurchase.Status.SUCCESS);
+            em.remove(em.find(Pickup.class, fixture.pickupId()));
+            return fixture;
+        });
+
+        var pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        var secondStarted = new java.util.concurrent.CountDownLatch(1);
+        try {
+            Long[] firstId = new Long[1];
+            var second = tx.execute(s -> {
+                firstId[0] = pickupService.createOrGetPickupForOrder(em.find(Order.class, data.orderId())).getId();
+                var future = pool.submit(() -> {
+                    Order order = tx.execute(read -> em.find(Order.class, data.orderId()));
+                    secondStarted.countDown();
+                    return pickupService.createOrGetPickupForOrder(order).getId();
+                });
+                try {
+                    assertThat(secondStarted.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+                    org.junit.jupiter.api.Assertions.assertThrows(java.util.concurrent.TimeoutException.class,
+                            () -> future.get(200, java.util.concurrent.TimeUnit.MILLISECONDS));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(e);
+                }
+                return future;
+            });
+            assertThat(second.get(5, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(firstId[0]);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
     @Test
     @DisplayName("판매자 수령 목록 화면 및 QR 스캔/코드조회, 수령완료 후 환불 차단 검증")
     void testPickupIndexAndFlow() throws Exception {
@@ -83,7 +197,7 @@ class SellerPickupIntegrationTest {
                 10000, 2, 20, 5,
                 now.minusDays(2), now.plusDays(1),
                 now.plusDays(4), now.plusDays(5),
-                "카운터에 문의", "박스 훼손 시 교환 불가", GroupPurchase.Status.OPEN
+                "카운터에 문의", "박스 훼손 시 교환 불가", GroupPurchase.Status.SUCCESS
         );
         em.persist(gp);
 
@@ -340,7 +454,7 @@ class SellerPickupIntegrationTest {
                 7000, 5, 20, 5,
                 now.minusDays(1), now.plusDays(2),
                 now.plusDays(3), now.plusDays(4),
-                "카운터", "안내", GroupPurchase.Status.OPEN
+                "카운터", "안내", GroupPurchase.Status.SUCCESS
         );
         em.persist(gp);
 
@@ -353,6 +467,8 @@ class SellerPickupIntegrationTest {
         em.flush();
 
         Pickup pickup = pickupService.createOrGetPickupForOrder(order);
+
+        pickupService.markReady(pickup.getId(), store.getId(), seller.getId());
 
         // 첫 번째 수령 완료 처리 -> 성공
         mvc.perform(post("/seller/stores/" + store.getId() + "/pickups/" + pickup.getId() + "/complete")

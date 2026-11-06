@@ -93,9 +93,7 @@ public class Pickup {
         if (this.order != null && this.order.getStatus() != Order.Status.PAID) {
             throw new IllegalStateException("결제 완료(PAID) 상태인 주문만 준비완료로 변경할 수 있습니다.");
         }
-        if (this.groupPurchase != null && this.groupPurchase.getStatus() == GroupPurchase.Status.FAILED) {
-            throw new IllegalStateException("모집 실패한 공동구매는 준비완료로 변경할 수 없습니다.");
-        }
+        validateGroupStatus();
         if (this.status == Status.PICKED_UP) {
             throw new IllegalStateException("이미 수령 완료된 건은 준비완료로 되돌릴 수 없습니다.");
         }
@@ -109,17 +107,40 @@ public class Pickup {
         if (this.order != null && this.order.getStatus() != Order.Status.PAID) {
             throw new IllegalStateException("결제 완료(PAID) 상태인 주문만 수령 처리할 수 있습니다. (현재 주문 상태: " + this.order.getStatus() + ")");
         }
-        if (this.groupPurchase != null && this.groupPurchase.getStatus() == GroupPurchase.Status.FAILED) {
-            throw new IllegalStateException("모집 실패한 공동구매는 수령할 수 없습니다.");
-        }
+        validateGroupStatus();
         if (this.status == Status.PICKED_UP) {
             throw new IllegalStateException("이미 수령이 완료된 건입니다.");
         }
         if (this.status == Status.CANCELLED) {
             throw new IllegalStateException("취소된 건은 수령할 수 없습니다.");
         }
+        if (this.status != Status.READY) {
+            throw new IllegalStateException("준비완료된 건만 수령할 수 있습니다.");
+        }
         this.status = Status.PICKED_UP;
         this.pickedUpAt = LocalDateTime.now();
+    }
+
+    public boolean canMarkReady() {
+        return status == Status.PREPARING && isEligibleForPickup();
+    }
+
+    public boolean canComplete() {
+        return status == Status.READY && isEligibleForPickup();
+    }
+
+    private boolean isEligibleForPickup() {
+        return order == null ? groupPurchase.getStatus() != GroupPurchase.Status.FAILED
+                : order.getStatus() == Order.Status.PAID && groupPurchase.getStatus() == GroupPurchase.Status.SUCCESS;
+    }
+
+    private void validateGroupStatus() {
+        if (order != null && groupPurchase.getStatus() != GroupPurchase.Status.SUCCESS) {
+            throw new IllegalStateException("모집에 성공한 공동구매만 수령을 진행할 수 있습니다.");
+        }
+        if (groupPurchase.getStatus() == GroupPurchase.Status.FAILED) {
+            throw new IllegalStateException("모집 실패한 공동구매는 수령을 진행할 수 없습니다.");
+        }
     }
 
     public void cancel() {

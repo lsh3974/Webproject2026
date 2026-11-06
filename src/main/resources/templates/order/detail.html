@@ -150,16 +150,19 @@
             <span th:if="${pickup.status.name() == 'PICKED_UP'}" class="badge bg-success mb-2 px-3 py-1">수령 완료</span>
             <span th:if="${pickup.status.name() == 'CANCELLED'}" class="badge bg-secondary mb-2 px-3 py-1">수령 취소</span>
 
-            <h2 class="h5 fw-bold mb-1">매장 수령증 & QR 코드</h2>
-            <p class="text-secondary small mb-3">
-                매장에 방문하여 아래 QR 코드 또는 수령 번호를 점원에게 보여주시면 상품을 수령하실 수 있습니다.
-            </p>
+            <div th:if="${pickup.canComplete()}">
+                <h2 class="h5 fw-bold mb-1">매장 수령증 & QR 코드</h2>
+                <p class="text-secondary small mb-3">
+                    매장에 방문하여 아래 QR 코드 또는 수령 번호를 점원에게 보여주시면 상품을 수령하실 수 있습니다.
+                </p>
 
-            <div id="orderPickupQr" class="d-flex justify-content-center my-3"></div>
+                <div id="orderPickupQr" class="d-flex justify-content-center my-3"></div>
 
-            <div class="bg-light p-3 rounded d-inline-block mx-auto mb-2">
-                <span class="text-muted small d-block">수령 코드</span>
-                <strong class="fs-5 font-monospace text-dark" th:text="${pickup.pickupCode}" id="orderPickupCodeText">PK-CODE</strong>
+                <div class="bg-light p-3 rounded d-inline-block mx-auto mb-2">
+                    <span class="text-muted small d-block">수령 코드</span>
+                    <strong class="fs-5 font-monospace text-dark" th:text="${pickup.pickupCode}" id="orderPickupCodeText">PK-CODE</strong>
+                </div>
+
             </div>
 
             <div th:if="${pickup.status.name() == 'PICKED_UP'}" class="alert alert-success small mb-0 mt-2">
@@ -389,7 +392,7 @@
     })();
 </script>
 
-<script th:if="${order.status.name() == 'PAID' and pickup != null}"
+<script th:if="${pickup != null and pickup.canComplete()}"
         th:inline="javascript">
     document.addEventListener('DOMContentLoaded', function() {
         const qrContainer = document.getElementById('orderPickupQr');
