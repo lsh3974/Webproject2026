@@ -97,6 +97,7 @@ public class SellerPickupController {
             data.put("customerName", p.getCustomerName() != null ? p.getCustomerName() : (p.getCustomer() != null ? p.getCustomer().getDisplayName() : "구매자"));
             data.put("customerPhone", maskPhoneNumber(p.getCustomerPhone()));
             data.put("status", p.getStatus().name());
+            data.put("canComplete", p.canComplete());
             data.put("pickedUpAt", p.getPickedUpAt() != null ? p.getPickedUpAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : null);
             return ResponseEntity.ok(data);
         } catch (ResponseStatusException e) {
