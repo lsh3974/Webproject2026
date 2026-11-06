@@ -123,11 +123,12 @@ class SellerPickupIntegrationTest {
                 .andExpect(redirectedUrl("/seller/stores/" + store.getId() + "/pickups"))
                 .andExpect(flash().attributeExists("successMessage"));
 
+        em.flush();
         em.clear();
         Pickup readyPickup = em.find(Pickup.class, pickup.getId());
         assertThat(readyPickup.getStatus()).isEqualTo(Pickup.Status.READY);
 
-        // 8. 판매자가 '수령 완료' 처리
+        // 8. 판매자가 '수령 완료' 처리 (잠금 순서에 따른 동시성 검증)
         mvc.perform(post("/seller/stores/" + store.getId() + "/pickups/" + pickup.getId() + "/complete")
                         .with(asUser(seller))
                         .with(csrf()))
@@ -135,6 +136,7 @@ class SellerPickupIntegrationTest {
                 .andExpect(redirectedUrl("/seller/stores/" + store.getId() + "/pickups"))
                 .andExpect(flash().attributeExists("successMessage"));
 
+        em.flush();
         em.clear();
         Pickup completedPickup = em.find(Pickup.class, pickup.getId());
         assertThat(completedPickup.getStatus()).isEqualTo(Pickup.Status.PICKED_UP);
@@ -152,6 +154,35 @@ class SellerPickupIntegrationTest {
         assertThatThrownBy(() -> refundService.cancelMyOrder(order.getId(), buyer.getId(), "단순 변심"))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("이미 매장에서 수령 완료된 상품은 주문을 취소하거나 환불받을 수 없습니다");
+    }
+
+    @Test
+    @DisplayName("QR 조회 API: 존재하지 않는 코드 조회 시 404 NOT_FOUND 반환, 타 판매자 접근 시 403 FORBIDDEN 반환")
+    void testQrLookupApiStatus() throws Exception {
+        User sellerA = new User("sellerA_qr@test.com", "pass", "판매자A");
+        ReflectionTestUtils.setField(sellerA, "role", User.Role.SELLER);
+        em.persist(sellerA);
+
+        User sellerB = new User("sellerB_qr@test.com", "pass", "판매자B");
+        ReflectionTestUtils.setField(sellerB, "role", User.Role.SELLER);
+        em.persist(sellerB);
+
+        Store storeA = new Store(sellerA, "마트A", null, "031-111-1111", "시흥시", null, null);
+        em.persist(storeA);
+        em.flush();
+
+        // 존재하지 않는 코드로 조회 시 404
+        mvc.perform(get("/seller/stores/" + storeA.getId() + "/pickups/api/lookup")
+                        .param("code", "PK-NONEXISTENT")
+                        .with(asUser(sellerA)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value(containsString("해당 매장의 수령 건을 찾을 수 없습니다")));
+
+        // 타 판매자B가 매장A의 QR 조회 API 접근 시 403 FORBIDDEN
+        mvc.perform(get("/seller/stores/" + storeA.getId() + "/pickups/api/lookup")
+                        .param("code", "PK-ANY")
+                        .with(asUser(sellerB)))
+                .andExpect(status().isForbidden());
     }
 
     @Test

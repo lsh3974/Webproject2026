@@ -5,6 +5,8 @@ import com.siheung.hanbaguni.entity.Order;
 import com.siheung.hanbaguni.entity.Pickup;
 import com.siheung.hanbaguni.entity.Store;
 import com.siheung.hanbaguni.entity.User;
+import com.siheung.hanbaguni.repository.GroupPurchaseRepository;
+import com.siheung.hanbaguni.repository.OrderRepository;
 import com.siheung.hanbaguni.repository.PickupRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
@@ -26,10 +29,18 @@ public class PickupService {
 
     private final PickupRepository pickupRepository;
     private final StoreService storeService;
+    private final OrderRepository orderRepository;
+    private final GroupPurchaseRepository groupPurchaseRepository;
 
-    public PickupService(PickupRepository pickupRepository, StoreService storeService) {
+    public PickupService(
+            PickupRepository pickupRepository,
+            StoreService storeService,
+            OrderRepository orderRepository,
+            GroupPurchaseRepository groupPurchaseRepository) {
         this.pickupRepository = pickupRepository;
         this.storeService = storeService;
+        this.orderRepository = orderRepository;
+        this.groupPurchaseRepository = groupPurchaseRepository;
     }
 
     public List<Pickup> findByStoreId(Long storeId, Long sellerId) {
@@ -108,12 +119,7 @@ public class PickupService {
     @Transactional
     public void markPickedUp(Long pickupId, Long storeId, Long sellerId) {
         Pickup pickup = getByIdWithStoreAndOwnershipCheck(pickupId, storeId, sellerId);
-        try {
-            pickup.markPickedUp();
-            pickupRepository.saveAndFlush(pickup);
-        } catch (IllegalStateException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-        }
+        completePickupWithLock(pickup);
     }
 
     @Transactional
@@ -130,24 +136,53 @@ public class PickupService {
     @Transactional
     public void markPickedUp(Long pickupId, Long sellerId) {
         Pickup pickup = getByIdWithOwnershipCheck(pickupId, sellerId);
-        try {
-            pickup.markPickedUp();
-            pickupRepository.saveAndFlush(pickup);
-        } catch (IllegalStateException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
-        }
+        completePickupWithLock(pickup);
     }
 
     @Transactional
     public Pickup markPickedUpByCode(String pickupCode, Long storeId, Long sellerId) {
         Pickup pickup = getByCodeAndStore(pickupCode, storeId, sellerId);
+        completePickupWithLock(pickup);
+        return pickup;
+    }
+
+    /**
+     * 환불 요청(RefundTransactions)과 동일한 잠금 순서(GroupPurchase -> Order)를 적용하여
+     * 환불과 수령 완료가 동시에 일어나는 경쟁 상태(Race Condition)를 원자적으로 방어합니다.
+     */
+    private void completePickupWithLock(Pickup pickup) {
+        if (pickup.getOrder() != null) {
+            Long orderId = pickup.getOrder().getId();
+            Long groupId = pickup.getGroupPurchase() != null
+                    ? pickup.getGroupPurchase().getId()
+                    : (pickup.getOrder().getGroupPurchase() != null ? pickup.getOrder().getGroupPurchase().getId() : null);
+
+            // 1. 환불과 동일하게 공동구매(GroupPurchase) 행을 비관적 락으로 먼저 잠금
+            if (groupId != null && groupPurchaseRepository != null) {
+                groupPurchaseRepository.findByIdWithLock(groupId);
+            }
+
+            // 2. 주문(Order) 행을 비관적 락으로 잠금
+            if (orderRepository != null) {
+                Order lockedOrder = orderRepository.findPaymentOrderWithLock(orderId)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "주문을 찾을 수 없습니다."));
+
+                // 3. 잠금을 획득한 시점의 최신 주문 상태가 PAID인지 엄격히 검증
+                if (lockedOrder.getStatus() != Order.Status.PAID) {
+                    throw new ResponseStatusException(
+                            HttpStatus.CONFLICT,
+                            "결제 완료(PAID) 상태인 주문만 수령 처리할 수 있습니다. (현재 주문 상태: " + lockedOrder.getStatus() + ")"
+                    );
+                }
+            }
+        }
+
         try {
             pickup.markPickedUp();
             pickupRepository.saveAndFlush(pickup);
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }
-        return pickup;
     }
 
     @Transactional
@@ -178,6 +213,12 @@ public class PickupService {
                 return candidate;
             }
         }
-        return "PK-" + datePrefix + "-" + System.currentTimeMillis() % 10000;
+        // 10회 시도 후 충돌 시 고유 식별자를 생성하며 DB 중복 여부를 최종 재확인
+        while (true) {
+            String fallback = "PK-" + datePrefix + "-" + UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+            if (!pickupRepository.existsByPickupCode(fallback)) {
+                return fallback;
+            }
+        }
     }
 }

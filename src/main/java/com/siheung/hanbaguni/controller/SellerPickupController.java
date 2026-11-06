@@ -92,8 +92,11 @@ public class SellerPickupController {
             data.put("status", p.getStatus().name());
             data.put("pickedUpAt", p.getPickedUpAt() != null ? p.getPickedUpAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) : null);
             return ResponseEntity.ok(data);
+        } catch (ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("message", e.getReason() != null ? e.getReason() : "수령 건 조회에 실패했습니다."));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage() != null ? e.getMessage() : "잘못된 요청입니다."));
         }
     }
 
@@ -149,36 +152,34 @@ public class SellerPickupController {
             @AuthenticationPrincipal LoginUser loginUser,
             RedirectAttributes redirectAttributes) {
 
+        storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
         try {
-            Pickup p = pickupService.markPickedUpByCode(pickupCode, storeId, loginUser.getUserId());
-            redirectAttributes.addFlashAttribute("successMessage",
-                    "[" + p.getPickupCode() + "] " + p.getGroupPurchase().getProduct().getName() + " " + p.getQuantity() + "개 수령 완료 처리되었습니다!");
+            pickupService.markPickedUpByCode(pickupCode, storeId, loginUser.getUserId());
+            redirectAttributes.addFlashAttribute("successMessage", "수령 코드 [" + pickupCode + "]의 수령 완료 처리가 완료되었습니다.");
         } catch (ResponseStatusException e) {
-            redirectAttributes.addFlashAttribute("errorMessage", "수령 처리 실패: " + e.getReason());
+            redirectAttributes.addFlashAttribute("errorMessage", e.getReason());
         } catch (Exception e) {
-            redirectAttributes.addFlashAttribute("errorMessage", "수령 처리 실패: " + e.getMessage());
+            redirectAttributes.addFlashAttribute("errorMessage", e.getMessage());
         }
         return "redirect:/seller/stores/" + storeId + "/pickups";
     }
 
-    @PostMapping("/mock-create")
-    public String createMockPickup(
+    @PostMapping({"/mock-create", "/test-generate"})
+    public String generateTestPickup(
             @PathVariable Long storeId,
             @RequestParam("groupPurchaseId") Long groupPurchaseId,
             @RequestParam(name = "quantity", defaultValue = "1") int quantity,
-            @RequestParam(name = "customerName", defaultValue = "홍길동") String customerName,
-            @RequestParam(name = "customerPhone", defaultValue = "010-9876-5432") String customerPhone,
+            @RequestParam(name = "customerName", defaultValue = "시흥주민") String customerName,
+            @RequestParam(name = "customerPhone", defaultValue = "010-1234-5678") String customerPhone,
             @AuthenticationPrincipal LoginUser loginUser,
             RedirectAttributes redirectAttributes) {
 
         Store store = storeService.getStoreWithOwnershipCheck(storeId, loginUser.getUserId());
-        GroupPurchase gp = groupPurchaseService.getWithOwnershipCheck(groupPurchaseId, loginUser.getUserId());
-        User currentUser = userRepository.findById(loginUser.getUserId())
-                .orElseThrow(() -> new IllegalStateException("회원 정보를 찾을 수 없습니다."));
+        GroupPurchase gp = groupPurchaseService.getWithStoreAndOwnershipCheck(storeId, groupPurchaseId, loginUser.getUserId());
+        User sellerUser = userRepository.findById(loginUser.getUserId()).orElse(null);
 
-        Pickup created = pickupService.createTestPickup(store, gp, currentUser, quantity, customerName, customerPhone);
-        redirectAttributes.addFlashAttribute("successMessage",
-                "테스트 수령 건이 생성되었습니다! 수령 코드: [" + created.getPickupCode() + "]");
-        return "redirect:/seller/stores/" + storeId + "/pickups?searchCode=" + created.getPickupCode();
+        Pickup pickup = pickupService.createTestPickup(store, gp, sellerUser, quantity, customerName, customerPhone);
+        redirectAttributes.addFlashAttribute("successMessage", "테스트용 수령증이 발급되었습니다. (수령코드: " + pickup.getPickupCode() + ")");
+        return "redirect:/seller/stores/" + storeId + "/pickups";
     }
 }

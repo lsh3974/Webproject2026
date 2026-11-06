@@ -7,6 +7,7 @@ import com.siheung.hanbaguni.entity.Store;
 import com.siheung.hanbaguni.entity.User;
 import com.siheung.hanbaguni.repository.GroupPurchaseRepository;
 import com.siheung.hanbaguni.repository.OrderRepository;
+import com.siheung.hanbaguni.service.PickupService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -25,13 +26,16 @@ public class PaymentTransactions {
 
     private final OrderRepository orders;
     private final GroupPurchaseRepository groups;
+    private final PickupService pickupService;
 
     public PaymentTransactions(
             OrderRepository orders,
-            GroupPurchaseRepository groups
+            GroupPurchaseRepository groups,
+            PickupService pickupService
     ) {
         this.orders = orders;
         this.groups = groups;
+        this.pickupService = pickupService;
     }
 
     // 결제창에 전달할 주문번호와 금액을 준비합니다.
@@ -147,6 +151,8 @@ public class PaymentTransactions {
         validateStoredAttempt(order, attempt);
 
         if (order.getStatus() == Order.Status.PAID) {
+            // 이미 결제 완료된 경우에도 수령증 존재 여부 보장
+            pickupService.createOrGetPickupForOrder(order);
             return paidResult();
         }
 
@@ -179,7 +185,8 @@ public class PaymentTransactions {
             }
         }
 
-
+        // 결제가 PAID로 확정되는 시점에 수령증(Pickup)을 즉시 생성하여 판매자 수령 목록에 반영
+        pickupService.createOrGetPickupForOrder(order);
 
         return paidResult();
     }
