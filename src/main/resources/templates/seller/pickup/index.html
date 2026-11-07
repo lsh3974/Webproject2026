@@ -21,6 +21,7 @@
             <a th:href="@{/seller/stores/{id}/products(id=${store.id})}" class="text-decoration-none text-secondary">상품 관리</a>
             <a th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}" class="text-decoration-none text-secondary">공동구매 관리</a>
             <a th:href="@{/}" class="text-decoration-none text-secondary">홈으로</a>
+            <span th:replace="~{notifications/fragments :: bell}"></span>
         </div>
     </div>
 </nav>

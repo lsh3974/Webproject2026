@@ -27,15 +27,18 @@ public class PaymentTransactions {
     private final OrderRepository orders;
     private final GroupPurchaseRepository groups;
     private final PickupService pickupService;
+    private final com.siheung.hanbaguni.notification.NotificationEventService notificationEvents;
 
     public PaymentTransactions(
             OrderRepository orders,
             GroupPurchaseRepository groups,
-            PickupService pickupService
+            PickupService pickupService,
+            com.siheung.hanbaguni.notification.NotificationEventService notificationEvents
     ) {
         this.orders = orders;
         this.groups = groups;
         this.pickupService = pickupService;
+        this.notificationEvents = notificationEvents;
     }
 
     // 결제창에 전달할 주문번호와 금액을 준비합니다.
@@ -183,6 +186,15 @@ public class PaymentTransactions {
                     orders.findPendingOrdersForGroupWithLock(group.getId())) {
                 pendingOrder.expireForGroupSuccess();
             }
+        }
+
+        // 상태 변경과 Outbox 이벤트를 동일한 DB 트랜잭션에 기록합니다.
+        notificationEvents.paymentCompleted(order);
+        if (becameSuccessful) {
+            notificationEvents.groupSucceeded(group);
+        } else if (group.getStatus() == GroupPurchase.Status.SUCCESS) {
+            // 모집 성공 판정 뒤 늦게 승인된 주문의 구매자에게도 성공 알림을 보냅니다.
+            notificationEvents.latePaidAfterGroupSuccess(order);
         }
 
         // 결제가 PAID로 확정되는 시점에 수령증(Pickup)을 즉시 생성하여 판매자 수령 목록에 반영

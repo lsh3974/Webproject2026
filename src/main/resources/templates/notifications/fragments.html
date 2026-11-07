@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<body>
+<span th:fragment="bell" sec:authorize="isAuthenticated()" class="notification-bell-wrap">
+    <input type="hidden" class="notification-csrf-token" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <button class="btn btn-outline-success btn-sm position-relative notification-bell-button"
+            type="button" 
+            aria-expanded="false" aria-label="알림 열기" aria-controls="notificationDropdown">
+        <span aria-hidden="true">🔔</span><span class="notification-bell-label">알림</span>
+        <span class="notification-unread-count badge rounded-pill text-bg-danger ms-1 d-none" aria-live="polite">0</span>
+    </button>
+    <section id="notificationDropdown" class="notification-dropdown p-0 shadow"
+             aria-label="최근 알림">
+        <div class="notification-dropdown-header d-flex align-items-center justify-content-between gap-2">
+            <div>
+                <h2 class="h6 fw-bold mb-0">알림</h2>
+                <small class="text-secondary notification-unread-summary">새 알림을 확인하세요</small>
+            </div>
+            <a class="small text-success text-decoration-none" th:href="@{/notifications/preferences}">수신 설정</a>
+        </div>
+        <div class="notification-dropdown-list" aria-live="polite" aria-busy="true">
+            <div class="notification-dropdown-state">알림을 불러오는 중...</div>
+        </div>
+        <div class="notification-dropdown-footer">
+            <a th:href="@{/notifications}" class="btn btn-light btn-sm w-100">알림 전체 보기</a>
+        </div>
+    </section>
+    <link rel="stylesheet" th:href="@{/css/notifications.css}">
+    <script th:src="@{/js/notifications.js}" defer></script>
+</span>
+</body>
+</html>

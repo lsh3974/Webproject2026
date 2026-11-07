@@ -7,6 +7,7 @@
         <a th:href="@{/group-purchases}">공동구매 목록</a>
         <div class="account-nav">
             <a sec:authorize="hasRole('SELLER')" th:href="@{/seller/stores}">내 매장 관리</a>
+            <span th:replace="~{notifications/fragments :: bell}"></span>
             <span sec:authorize="isAuthenticated()"><strong th:text="${#authentication.principal.displayName}">회원</strong>님</span>
             <form sec:authorize="isAuthenticated()" th:action="@{/logout}" method="post">
                 <button type="submit">로그아웃</button>

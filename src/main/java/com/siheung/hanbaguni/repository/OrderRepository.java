@@ -12,13 +12,19 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import jakarta.persistence.LockModeType;
-import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-
-import java.util.Optional;
 public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    @EntityGraph(attributePaths = {"user", "groupPurchase", "groupPurchase.store", "groupPurchase.store.seller"})
+    @Query("""
+    SELECT o
+    FROM Order o
+    WHERE o.groupPurchase.id = :groupPurchaseId
+      AND o.status = :status
+    """)
+    List<Order> findByGroupPurchaseIdAndStatus(
+            @Param("groupPurchaseId") Long groupPurchaseId,
+            @Param("status") Order.Status status
+    );
 
     @EntityGraph(attributePaths = {"groupPurchase", "groupPurchase.store", "groupPurchase.product"})
     @Query("SELECT o FROM Order o WHERE o.user.id = :userId ORDER BY o.id DESC")

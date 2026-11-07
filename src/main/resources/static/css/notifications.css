@@ -1,0 +1,43 @@
+/* Header notification popover */
+.notification-bell-wrap { position: relative; }
+.notification-bell-button { white-space: nowrap; }
+.notification-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: min(390px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    margin-top: .65rem !important;
+    border: 1px solid #e7ece8;
+    background: #fff;
+    border-radius: .85rem;
+    overflow: hidden;
+    z-index: 1080;
+}
+.notification-dropdown.is-open { display: block; }
+.notification-dropdown-header { padding: 1rem 1rem .8rem; border-bottom: 1px solid #edf0ed; }
+.notification-dropdown-list { max-height: min(430px, 60vh); overflow-y: auto; overscroll-behavior: contain; }
+.notification-dropdown-state { padding: 2rem 1rem; text-align: center; color: #6c757d; font-size: .9rem; }
+.notification-dropdown-item {
+    display: flex; align-items: flex-start; gap: .75rem; width: 100%; padding: .9rem 1rem;
+    color: inherit; text-align: left; text-decoration: none; background: #fff; border: 0;
+    border-bottom: 1px solid #f0f2f0; cursor: pointer;
+}
+.notification-dropdown-item:hover, .notification-dropdown-item:focus-visible { background: #f7faf7; }
+.notification-dropdown-item.unread { background: #f3faf5; }
+.notification-dropdown-item.unread:hover { background: #eaf5ed; }
+.notification-dropdown-icon {
+    display: inline-flex; flex: 0 0 2.25rem; width: 2.25rem; height: 2.25rem;
+    align-items: center; justify-content: center; border-radius: .7rem; background: #eaf5ed; font-size: 1.05rem;
+}
+.notification-dropdown-copy { min-width: 0; flex: 1; }
+.notification-dropdown-title { display: flex; align-items: center; gap: .4rem; margin-bottom: .2rem; font-size: .9rem; font-weight: 650; }
+.notification-dropdown-body { display: -webkit-box; overflow: hidden; color: #6c757d; font-size: .82rem; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.notification-dropdown-time { display: block; margin-top: .35rem; color: #929a94; font-size: .72rem; }
+.notification-dropdown-new { width: .45rem; height: .45rem; flex: 0 0 .45rem; margin-top: .35rem; border-radius: 50%; background: #198754; }
+.notification-dropdown-footer { padding: .7rem; background: #fff; border-top: 1px solid #edf0ed; }
+@media (max-width: 575.98px) {
+    .notification-dropdown { position: fixed !important; top: 4.25rem !important; right: 12px !important; left: 12px !important; width: auto; transform: none !important; margin-top: .5rem !important; }
+    .notification-dropdown-list { max-height: min(55vh, 390px); }
+}
