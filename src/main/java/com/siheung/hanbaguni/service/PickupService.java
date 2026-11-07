@@ -37,18 +37,21 @@ public class PickupService {
     private final OrderRepository orderRepository;
     private final GroupPurchaseRepository groupPurchaseRepository;
     private final EntityManager entityManager;
+    private final com.siheung.hanbaguni.notification.NotificationEventService notificationEvents;
 
     public PickupService(
             PickupRepository pickupRepository,
             StoreService storeService,
             OrderRepository orderRepository,
             GroupPurchaseRepository groupPurchaseRepository,
-            EntityManager entityManager) {
+            EntityManager entityManager,
+            com.siheung.hanbaguni.notification.NotificationEventService notificationEvents) {
         this.pickupRepository = pickupRepository;
         this.storeService = storeService;
         this.orderRepository = orderRepository;
         this.groupPurchaseRepository = groupPurchaseRepository;
         this.entityManager = entityManager;
+        this.notificationEvents = notificationEvents;
     }
 
     public List<Pickup> findByStoreId(Long storeId, Long sellerId) {
@@ -154,8 +157,16 @@ public class PickupService {
         Pickup locked = pickupRepository.findByIdWithLock(pickup.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "수령 정보를 찾을 수 없습니다."));
         entityManager.refresh(locked, LockModeType.PESSIMISTIC_WRITE);
+        Pickup.Status before = locked.getStatus();
         try {
             change.accept(locked);
+            if (locked.getOrder() != null && before != locked.getStatus()) {
+                if (locked.getStatus() == Pickup.Status.READY) {
+                    notificationEvents.pickupReady(locked);
+                } else if (locked.getStatus() == Pickup.Status.PICKED_UP) {
+                    notificationEvents.pickupCompleted(locked);
+                }
+            }
         } catch (IllegalStateException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }

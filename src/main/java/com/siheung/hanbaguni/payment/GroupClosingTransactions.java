@@ -17,6 +17,7 @@ public class GroupClosingTransactions {
 
     private final GroupPurchaseRepository groups;
     private final OrderRepository orders;
+    private final com.siheung.hanbaguni.notification.NotificationEventService notificationEvents;
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public boolean closeIfDue(Long groupId, LocalDateTime now) {
@@ -35,6 +36,8 @@ public class GroupClosingTransactions {
             order.expireReservation();
         }
 
+        // 모집 실패 확정과 환불 예정 안내 이벤트를 같은 트랜잭션에 저장합니다.
+        notificationEvents.groupFailed(group);
         return true;
     }
 }

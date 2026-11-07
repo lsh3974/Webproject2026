@@ -14,6 +14,7 @@
         <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
         <a th:href="@{/seller/stores}" class="text-decoration-none text-secondary">매장 목록으로</a>
     </div>
+    <span th:replace="~{notifications/fragments :: bell}"></span>
 </nav>
 
 <main class="container py-5">

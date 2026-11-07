@@ -23,6 +23,7 @@ public class SecurityConfig {
                                 "/login",
                                 "/css/**",
                                 "/js/**",
+                                "/service-worker.js",
                                 "/images/**",
                                 "/uploads/**",
                                 "/actuator/health",
