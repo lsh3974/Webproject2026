@@ -7,19 +7,17 @@
     <meta name="_csrf" th:content="${_csrf.token}">
     <meta name="_csrf_header" th:content="${_csrf.headerName}">
 
-    <title>한바구니 결제</title>
-
-    <link
-            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-            rel="stylesheet">
+    <title>한바구니 결제 - 시흥한바구니</title>
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 
     <script src="https://js.tosspayments.com/v2/standard"></script>
 </head>
-<body class="bg-light">
-<nav class="navbar bg-white border-bottom"><div class="container d-flex justify-content-between"><a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a><span th:replace="~{notifications/fragments :: bell}"></span></div></nav>
+<body class="ui-app ui-buyer bg-light">
+
+<div th:replace="~{fragments/ui :: buyerHeader}"></div>
 
 <main id="payment-page"
-      class="container py-5"
+      class="container ui-main py-5"
       style="max-width: 680px"
       th:attr="
         data-order-id=${order.id},
@@ -30,60 +28,67 @@
         data-success-url=${successUrl},
         data-fail-url=${failUrl}">
 
-    <div class="card shadow-sm">
-        <div class="card-body p-4">
-            <h1 class="h4 mb-4">공동구매 결제</h1>
+    <div class="card border-0 shadow-sm rounded-4 bg-white p-4 p-md-5">
+        <div class="mb-4">
+            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 mb-2">TOSS PAYMENTS</span>
+            <h1 class="h3 fw-bold mb-1">공동구매 결제</h1>
+            <p class="text-secondary small mb-0">주문 내역을 확인하시고 토스페이먼츠 안전 결제를 진행해주세요.</p>
+        </div>
 
-            <p>
-                주문번호:
-                <strong th:text="${order.id}"></strong>
-            </p>
-
-            <p>
-                결제 금액:
-                <strong th:text="${#numbers.formatInteger(
-                    order.totalPrice, 1, 'COMMA')}"></strong>원
-            </p>
-
-            <p class="text-muted">
-                테스트 결제로 진행됩니다.
-            </p>
-
-            <div id="payment-message"
-                 class="alert alert-secondary"
-                 role="status"
-                 aria-live="polite">
-                결제 정보를 확인하고 있습니다.
+        <div class="p-3 bg-light rounded-4 border mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-secondary small">주문 번호</span>
+                <span class="badge bg-white text-dark border">#<span th:text="${order.id}">1</span></span>
             </div>
 
-            <div class="d-flex flex-wrap gap-2">
-                <button id="pay-button"
-                        type="button"
-                        class="btn btn-success"
-                        hidden>
-                    테스트 결제하기
-                </button>
-
-                <button id="retry-button"
-                        type="button"
-                        class="btn btn-outline-primary"
-                        hidden>
-                    결제 결과 다시 확인
-                </button>
-
-                <form th:if="${order.status.name() == 'PENDING' and mode != 'success'}"
-                      th:action="@{/orders/{id}/cancel(id=${order.id})}" method="post">
-                    <button type="submit" class="btn btn-outline-danger">예약 취소하고 수량 반환</button>
-                </form>
-
-                <a class="btn btn-outline-secondary"
-                   th:href="@{/orders/{id}(id=${order.id})}">
-                    주문 상세
-                </a>
+            <div class="d-flex justify-content-between align-items-baseline pt-2 border-top">
+                <span class="fw-semibold text-dark">총 결제 금액</span>
+                <strong class="fs-3 text-success">
+                    <span th:text="${#numbers.formatInteger(order.totalPrice, 1, 'COMMA')}">10,000</span>원
+                </strong>
             </div>
+
+            <p class="text-muted small mb-0 mt-2">
+                &bull; 테스트 결제 모드로 동작하며 실제 금액이 청구되지 않습니다.
+            </p>
+        </div>
+
+        <div id="payment-message"
+             class="alert alert-secondary rounded-3 small mb-4"
+             role="status"
+             aria-live="polite">
+            결제 정보를 확인하고 있습니다.
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 pt-2 border-top">
+            <button id="pay-button"
+                    type="button"
+                    class="btn btn-success fw-semibold flex-fill py-2"
+                    hidden>
+                결제 진행하기
+            </button>
+
+            <button id="retry-button"
+                    type="button"
+                    class="btn btn-outline-primary fw-semibold flex-fill py-2"
+                    hidden>
+                결제 결과 다시 확인
+            </button>
+
+            <form th:if="${order.status.name() == 'PENDING' and mode != 'success'}"
+                  th:action="@{/orders/{id}/cancel(id=${order.id})}" method="post" class="m-0">
+                <button type="submit" class="btn btn-outline-danger py-2">예약 취소 (수량 반환)</button>
+            </form>
+
+            <a class="btn btn-outline-secondary py-2"
+               th:href="@{/orders/{id}(id=${order.id})}">
+                주문 상세로
+            </a>
         </div>
     </div>
 </main>
+
+<div th:replace="~{fragments/ui :: footer}"></div>
 
 <script th:src="@{/js/payment.js}"></script>
 </body>
