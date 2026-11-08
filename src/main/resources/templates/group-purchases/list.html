@@ -4,48 +4,151 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>공동구매 목록 · 시흥한바구니</title>
-    <link rel="stylesheet" th:href="@{/css/group-purchases.css}">
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 </head>
-<body>
-<a class="skip-link" href="#main">본문으로 건너뛰기</a>
-<div th:replace="~{group-purchases/fragments :: header}"></div>
-<main id="main" class="container page">
-    <h1>공동구매 목록</h1>
-    <p>현재 모집 중인 공동구매를 조회합니다.</p>
-    <form class="search-form" th:action="@{/group-purchases}" method="get" role="search" aria-label="공동구매 검색">
-        <div class="field"><label for="q">상품명·매장명·모집 제목</label><input id="q" name="q" type="search" maxlength="100" th:value="${q}"></div>
-        <div class="field"><label for="district">지역</label><input id="district" name="district" maxlength="100" th:value="${district}" placeholder="예: 정왕동"></div>
-        <div class="field"><label for="category">카테고리</label><input id="category" name="category" maxlength="100" th:value="${category}" placeholder="예: 채소"></div>
-        <div class="actions"><button class="primary" type="submit">검색</button><a th:href="@{/group-purchases}">초기화</a></div>
-    </form>
+<body class="ui-app ui-buyer bg-light">
 
-    <p>검색 결과 <strong th:text="${purchases.totalElements}">0</strong>건 · 최신 등록순</p>
-    <div class="table-wrap" th:if="${!purchases.empty}">
-        <table>
-            <caption class="sr-only">모집 중인 공동구매 검색 결과</caption>
-            <thead><tr><th scope="col">공동구매 / 상품</th><th scope="col">매장</th><th scope="col">가격</th><th scope="col">현재 / 목표 수량</th><th scope="col">모집 마감</th><th scope="col">조회</th></tr></thead>
-            <tbody>
-            <tr th:each="item : ${purchases.content}">
-                <td><strong th:text="${item.title}">제목</strong><br><small><span th:text="${item.productName}">상품</span> · <span th:text="${item.category}">분류</span></small></td>
-                <td th:text="${item.storeName}">매장</td>
-                <td><span th:text="${#numbers.formatInteger(item.groupPrice, 1, 'COMMA')}">0</span>원 / <span th:text="${item.unit}">개</span></td>
-                <td><span th:text="${item.currentQuantity}">0</span> / <span th:text="${item.targetQuantity}">0</span> <span th:text="${item.unit}">개</span></td>
-                <td th:text="${#temporals.format(item.endAt, 'yyyy.MM.dd HH:mm')}">마감</td>
-                <td><a th:href="@{/group-purchases/{id}(id=${item.id})}" th:aria-label="${item.title + ' 상세 보기'}">상세 보기</a></td>
-            </tr>
-            </tbody>
-        </table>
+<div th:replace="~{fragments/ui :: buyerHeader}"></div>
+
+<main id="main" class="container ui-main py-4">
+
+    <!-- 상단 타이틀 및 검색 바 -->
+    <div class="mb-4">
+        <h1 class="h3 fw-bold mb-2">공동구매 목록</h1>
+        <p class="text-secondary small mb-4">현재 모집 중인 공동구매를 조회합니다.</p>
+
+        <form class="card border-0 shadow-sm p-4 rounded-4 mb-4" th:action="@{/group-purchases}" method="get" role="search" aria-label="공동구매 검색">
+            <div class="row g-3">
+                <div class="col-12 col-md-5">
+                    <label for="q" class="form-label small fw-semibold text-secondary">상품명·매장명·모집 제목</label>
+                    <input id="q" name="q" type="search" class="form-control" maxlength="100" th:value="${q}">
+                </div>
+                <div class="col-6 col-md-3">
+                    <label for="district" class="form-label small fw-semibold text-secondary">지역</label>
+                    <input id="district" name="district" class="form-control" maxlength="100" th:value="${district}" placeholder="예: 정왕동">
+                </div>
+                <div class="col-6 col-md-2">
+                    <label for="category" class="form-label small fw-semibold text-secondary">카테고리</label>
+                    <input id="category" name="category" class="form-control" maxlength="100" th:value="${category}" placeholder="예: 채소">
+                </div>
+                <div class="col-12 col-md-2 d-flex align-items-end gap-2">
+                    <button class="btn btn-success w-100 fw-semibold primary" type="submit">검색</button>
+                    <a th:href="@{/group-purchases}" class="btn btn-outline-secondary">초기화</a>
+                </div>
+            </div>
+        </form>
     </div>
-    <div class="notice" th:if="${purchases.empty}">
-        <p>조건에 맞는 공동구매가 없어요.</p>
-        <a th:href="@{/group-purchases}">전체 목록 보기</a>
+
+    <!-- 검색 결과 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <p class="text-secondary small mb-0">
+            검색 결과 <strong class="text-success" th:text="${purchases.totalElements}">0</strong>건 · 최신 등록순
+        </p>
     </div>
-    <nav class="pagination" aria-label="목록 페이지" th:if="${purchases.totalPages > 1 or purchases.number > 0}">
-        <a th:if="${purchases.number > 0}" th:href="@{/group-purchases(q=${q},district=${district},category=${category},page=${purchases.number - 1})}">← 이전</a>
-        <span th:if="${purchases.totalPages > purchases.number}" th:text="|${purchases.number + 1} / ${purchases.totalPages}|">1 / 1</span>
-        <a th:if="${purchases.hasNext()}" th:href="@{/group-purchases(q=${q},district=${district},category=${category},page=${purchases.number + 1})}">다음 →</a>
+
+    <!-- 결과 없음 -->
+    <div th:if="${purchases.empty}" class="card border-0 shadow-sm rounded-4 p-5 text-center my-4 notice">
+        <p class="text-secondary fs-5 mb-2">조건에 맞는 공동구매가 없어요.</p>
+        <p class="text-muted small mb-4">검색어를 바꾸거나 전체 목록을 확인해보세요.</p>
+        <div>
+            <a th:href="@{/group-purchases}" class="btn btn-outline-success">전체 목록 보기</a>
+        </div>
+    </div>
+
+    <!-- 카드 그리드 뷰 -->
+    <div th:if="${!purchases.empty}" class="row g-4 mb-4">
+        <div class="col-12 col-sm-6 col-lg-4" th:each="item : ${purchases.content}">
+            <div class="card h-100 border-0 shadow-sm rounded-4 overflow-hidden position-relative">
+                
+                <!-- 상품 대표 이미지 또는 플레이스홀더 -->
+                <div class="position-relative bg-light" style="height: 180px; overflow: hidden;">
+                    <img th:if="${item.imageUrl != null and !#strings.isEmpty(item.imageUrl)}"
+                         th:src="${item.imageUrl}"
+                         class="w-100 h-100 object-fit-cover"
+                         th:alt="${item.title}">
+                    <div th:if="${item.imageUrl == null or #strings.isEmpty(item.imageUrl)}"
+                         class="w-100 h-100 d-flex flex-column justify-content-center align-items-center text-secondary bg-success-subtle">
+                        <span class="fs-1">🛒</span>
+                        <span class="small mt-1 text-success-emphasis fw-semibold" th:text="${item.category}">카테고리</span>
+                    </div>
+
+                    <!-- 매장 태그 -->
+                    <span class="position-absolute top-0 start-0 m-3 badge bg-dark bg-opacity-75 rounded-pill px-3 py-2 small"
+                          th:text="${item.storeName}">매장명</span>
+
+                    <!-- 마감 D-day 또는 시각 -->
+                    <span class="position-absolute bottom-0 end-0 m-2 badge bg-light text-dark shadow-sm">
+                        마감 <span th:text="${#temporals.format(item.endAt, 'MM/dd HH:mm')}">마감일</span>
+                    </span>
+                </div>
+
+                <div class="card-body p-4 d-flex flex-column">
+                    <!-- 상품 및 카테고리 -->
+                    <div class="small text-muted mb-1">
+                        <span th:text="${item.productName}">상품명</span> · 
+                        <span th:text="${item.category}">분류</span>
+                    </div>
+
+                    <!-- 제목 -->
+                    <h2 class="h5 fw-bold mb-3 text-truncate">
+                        <a th:href="@{/group-purchases/{id}(id=${item.id})}"
+                           class="text-decoration-none text-dark stretched-link"
+                           th:text="${item.title}">공동구매 모집 제목</a>
+                    </h2>
+
+                    <!-- 가격 정보 -->
+                    <div class="mb-3">
+                        <div class="d-flex align-items-baseline gap-2">
+                            <span class="fs-4 fw-bold text-success"
+                                  th:text="${#numbers.formatInteger(item.groupPrice, 1, 'COMMA')}">12,000</span>원 / 
+                            <span class="text-secondary small" th:text="${item.unit}">개</span>
+                        </div>
+                    </div>
+
+                    <!-- 달성률 프로그레스 바 -->
+                    <div class="mt-auto">
+                        <div class="d-flex justify-content-between small text-secondary mb-1">
+                            <span>달성 수량</span>
+                            <strong>
+                                <span th:text="${item.currentQuantity}">0</span> / 
+                                <span th:text="${item.targetQuantity}">0</span> <span th:text="${item.unit}">개</span>
+                            </strong>
+                        </div>
+                        <div class="progress" style="height: 8px;" role="progressbar" 
+                             th:aria-valuenow="${item.targetQuantity > 0 ? (item.currentQuantity * 100 / item.targetQuantity) : 0}" 
+                             aria-valuemin="0" aria-valuemax="100">
+                            <div class="progress-bar bg-success"
+                                 th:style="'width: ' + ${item.targetQuantity > 0 ? (item.currentQuantity * 100 / item.targetQuantity) : 0} + '%;'"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 카드 푸터 -->
+                <div class="card-footer bg-white border-0 px-4 pb-3 pt-0 text-end">
+                    <span class="text-success small fw-semibold">상세보기 & 예약하기 &rarr;</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 페이지네이션 -->
+    <nav class="d-flex justify-content-center mt-5" aria-label="목록 페이지" th:if="${purchases.totalPages > 1 or purchases.number > 0}">
+        <ul class="pagination">
+            <li class="page-item" th:if="${purchases.number > 0}">
+                <a class="page-link" th:href="@{/group-purchases(q=${q},district=${district},category=${category},page=${purchases.number - 1})}">← 이전</a>
+            </li>
+            <li class="page-item active" th:if="${purchases.totalPages > purchases.number}">
+                <span class="page-link bg-success border-success" th:text="|${purchases.number + 1} / ${purchases.totalPages}|">1 / 1</span>
+            </li>
+            <li class="page-item" th:if="${purchases.hasNext()}">
+                <a class="page-link" th:href="@{/group-purchases(q=${q},district=${district},category=${category},page=${purchases.number + 1})}">다음 →</a>
+            </li>
+        </ul>
     </nav>
+
 </main>
-<div th:replace="~{group-purchases/fragments :: footer}"></div>
+
+<div th:replace="~{fragments/ui :: footer}"></div>
+
 </body>
 </html>

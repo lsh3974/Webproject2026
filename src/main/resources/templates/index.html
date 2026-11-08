@@ -4,79 +4,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>시흥한바구니</title>
-
-    <link
-            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
-            rel="stylesheet"
-            integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
-            crossorigin="anonymous">
+    <title>우리 동네 공동구매 · 시흥한바구니</title>
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 </head>
-<body class="bg-light">
+<body class="ui-app ui-buyer bg-light">
 
-<nav class="navbar bg-white border-bottom">
-    <div class="container d-flex flex-wrap gap-3">
-        <a class="navbar-brand fw-bold text-success" th:href="@{/}">
-            시흥한바구니
-        </a>
+<div th:replace="~{fragments/ui :: buyerHeader}"></div>
 
-        <div sec:authorize="isAnonymous()"
-             class="d-flex align-items-center gap-2">
-            <a th:href="@{/login}" class="btn btn-outline-success">
-                로그인
+<main id="main" class="container ui-main py-4">
+
+    <!-- 히어로 배너 -->
+    <section class="ui-hero p-5 rounded-4 shadow-sm mb-5 text-white position-relative overflow-hidden" 
+             style="background: linear-gradient(135deg, #285442 0%, #1e3f32 100%);">
+        <span class="badge bg-white text-success fw-bold px-3 py-2 mb-3">OUR NEIGHBORHOOD MARKET</span>
+        <h1 class="display-5 fw-bold mb-3">우리 동네에서 함께,<br>필요한 만큼 알뜰하게.</h1>
+        <p class="lead mb-4 text-white-50">
+            가까운 매장의 좋은 상품을 이웃들과 함께 구매하고,<br>
+            원하는 시간에 동네 매장에서 직접 신선하게 수령하세요.
+        </p>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-warning fw-bold px-4 py-2" th:href="@{/group-purchases}">
+                모집 중인 상품 둘러보기 ↗
             </a>
-            <a th:href="@{/signup}" class="btn btn-success">
-                회원가입
+            <a sec:authorize="isAuthenticated()" class="btn btn-outline-light px-4 py-2" th:href="@{/orders}">
+                내 주문·예약 확인
             </a>
-        </div>
-
-        <div sec:authorize="isAuthenticated()"
-             class="d-flex align-items-center gap-3">
-            <span th:replace="~{notifications/fragments :: bell}"></span>
-            <!-- 8번 기능: 내 주문·수량 예약 내역 링크 -->
-            <a th:href="@{/orders}" class="btn btn-outline-primary btn-sm">
-                내 주문·예약
-            </a>
-
-            <!-- 판매자(ROLE_SELLER) 권한이 있는 사용자에게만 매장 관리 버튼 표시 -->
-            <a sec:authorize="hasRole('SELLER')"
-               th:href="@{/seller/stores}" class="btn btn-outline-success btn-sm">
-                내 매장 관리
-            </a>
-
-            <span>
-                <strong th:text="${#authentication.principal.displayName}">
-                    닉네임
-                </strong>님
-            </span>
-
-            <form th:action="@{/logout}" method="post" class="m-0">
-                <button type="submit" class="btn btn-outline-secondary">
-                    로그아웃
-                </button>
-            </form>
-        </div>
-    </div>
-</nav>
-
-<main class="container py-5">
-    <h1 class="fw-bold">우리 동네 공동구매</h1>
-    <p class="text-secondary">
-        필요한 만큼 함께 구매하고, 가까운 매장에서 수령하세요.
-    </p>
-
-    <section class="card border-0 shadow-sm mt-4"
-             aria-labelledby="campaign-heading">
-        <div class="card-body p-4">
-            <h2 id="campaign-heading" class="h5">모집 중인 공동구매</h2>
-            <p class="text-secondary">가까운 매장에서 진행 중인 공동구매를 확인하세요.</p>
-            <div class="d-flex flex-wrap gap-2">
-                <a th:href="@{/group-purchases}" class="btn btn-success">공동구매 둘러보기</a>
-                <a sec:authorize="isAuthenticated()" th:href="@{/orders}" class="btn btn-outline-dark">내 주문·예약 내역</a>
-            </div>
         </div>
     </section>
+
+    <!-- 프로세스 소개 3단계 -->
+    <div class="mb-4">
+        <div class="text-center mb-5">
+            <span class="text-success fw-bold small text-uppercase">How It Works</span>
+            <h2 class="fw-bold mt-1">가까워서 더 안심되는 동네 장보기</h2>
+            <p class="text-secondary">필요한 만큼 함께 모으고, 우리 동네 매장에서 바로 만나요.</p>
+        </div>
+
+        <div class="row g-4 mb-5">
+            <div class="col-12 col-md-4">
+                <div class="card h-100 border-0 shadow-sm p-4 text-center rounded-4">
+                    <div class="fs-1 mb-3">🔍</div>
+                    <span class="text-muted small fw-bold">STEP 01</span>
+                    <h3 class="h5 fw-bold mt-2">동네 상품 둘러보기</h3>
+                    <p class="text-secondary small mb-0">
+                        우리 동네 매장에서 열리는 신선식품, 과일, 생필품 공동구매를 확인하세요.
+                    </p>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card h-100 border-0 shadow-sm p-4 text-center rounded-4">
+                    <div class="fs-1 mb-3">🛒</div>
+                    <span class="text-muted small fw-bold">STEP 02</span>
+                    <h3 class="h5 fw-bold mt-2">필요한 수량 예약 & 결제</h3>
+                    <p class="text-secondary small mb-0">
+                        목표 수량을 달성하면 선결제로 간편하게 확정되고 안전하게 보호됩니다.
+                    </p>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card h-100 border-0 shadow-sm p-4 text-center rounded-4">
+                    <div class="fs-1 mb-3">📦</div>
+                    <span class="text-muted small fw-bold">STEP 03</span>
+                    <h3 class="h5 fw-bold mt-2">QR 코드로 매장 수령</h3>
+                    <p class="text-secondary small mb-0">
+                        상품이 준비되면 모바일 QR 코드를 매장에 제시하고 편리하게 픽업하세요.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 하단 빠른 바로가기 카드 -->
+    <div class="card border-0 shadow-sm rounded-4 p-4 p-md-5 bg-white text-center">
+        <h3 class="fw-bold mb-2">지금 진행 중인 공동구매에 참여해보세요!</h3>
+        <p class="text-secondary mb-4">혼자 사기 부담스러운 대용량 상품도, 동네 이웃과 함께라면 저렴하고 가볍게.</p>
+        <div class="d-flex justify-content-center flex-wrap gap-2">
+            <a th:href="@{/group-purchases}" class="btn btn-success px-4 py-2 fw-semibold">
+                공동구매 둘러보기 →
+            </a>
+            <a sec:authorize="hasRole('SELLER')" th:href="@{/seller/stores}" class="btn btn-outline-success px-4 py-2 fw-semibold">
+                판매자 센터로 이동
+            </a>
+        </div>
+    </div>
+
 </main>
+
+<div th:replace="~{fragments/ui :: footer}"></div>
 
 </body>
 </html>
