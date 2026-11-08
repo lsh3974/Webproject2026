@@ -4,44 +4,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>매장 수령 관리 & QR 체크 - 시흥한바구니</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
     <!-- QR 스캐너 라이브러리 (html5-qrcode) -->
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script th:src="@{/js/vendor/html5-qrcode.min.js}"></script>
     <!-- QR 코드 생성 라이브러리 (테스트용 QR 렌더링용 qrcodejs) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script th:src="@{/js/vendor/qrcode.min.js}"></script>
 </head>
-<body class="bg-light">
+<body class="ui-app ui-seller ui-pickup-dashboard">
 
-<nav class="navbar bg-white border-bottom">
-    <div class="container d-flex flex-wrap gap-3">
-        <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
-        <div class="d-flex align-items-center gap-3">
-            <a th:href="@{/seller/stores}" class="text-decoration-none text-secondary">매장 목록</a>
-            <a th:href="@{/seller/stores/{id}/products(id=${store.id})}" class="text-decoration-none text-secondary">상품 관리</a>
-            <a th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}" class="text-decoration-none text-secondary">공동구매 관리</a>
-            <a th:href="@{/}" class="text-decoration-none text-secondary">홈으로</a>
-        </div>
-    </div>
-</nav>
+<div th:replace="~{fragments/ui :: sellerHeader(${store})}"></div>
 
-<main class="container py-5">
+<main id="main" class="container ui-main">
     <!-- 안내 메시지 -->
     <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show" role="alert">
         <span th:text="${successMessage}"></span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="닫기"></button>
     </div>
     <div th:if="${errorMessage}" class="alert alert-danger alert-dismissible fade show" role="alert">
         <span th:text="${errorMessage}"></span>
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="닫기"></button>
     </div>
 
     <!-- Header Card -->
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="card ui-pickup-banner border-0 shadow-sm mb-4">
         <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div>
                 <span class="badge bg-success mb-2" th:text="${store.status}">ACTIVE</span>
-                <h1 class="h3 fw-bold mb-1" th:text="${store.name} + ' - 매장 수령 & QR 체크 (11번)'">매장 수령 관리</h1>
+                <h1 class="h3 fw-bold mb-1" th:text="${store.name} + ' · 매장 수령 관리'">매장 수령 관리</h1>
                 <p class="text-muted small mb-0">
                     공동구매 상품의 준비완료 처리 및 고객의 QR 코드 / 수령코드를 스캔하여 수령완료를 확정합니다.
                 </p>
@@ -50,8 +39,8 @@
                 <a th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}" class="btn btn-outline-secondary">
                     공동구매 목록
                 </a>
-                <button type="button" class="btn btn-primary" id="btnToggleTestOrderBox">
-                    + 테스트용 주문(수령건) 생성
+                <button type="button" class="btn btn-outline-success" id="btnToggleTestOrderBox" aria-expanded="false" aria-controls="testOrderBox">
+                    시연용 수령 건 생성
                 </button>
             </div>
         </div>
@@ -61,9 +50,9 @@
     <div class="collapse mb-4" id="testOrderBox">
         <div class="card border-primary-subtle bg-primary-subtle bg-opacity-10 shadow-sm">
             <div class="card-body p-4">
-                <h2 class="h5 fw-bold text-primary mb-2">🛠️ 11번 기능 테스트를 위한 가상 수령 건 생성</h2>
+                <h2 class="h5 fw-bold text-primary mb-2">시연용 수령 건 생성</h2>
                 <p class="text-muted small mb-3">
-                    결제 연동 전에도 수령 관리(준비완료, QR 스캔, 수령완료) 흐름을 확인해볼 수 있는 개발자 편의 기능입니다.
+                    결제 연동 전에도 수령 관리(준비완료, QR 스캔, 수령완료) 흐름을 확인해볼 수 있는 시연용 기능입니다. 실제 고객 주문과 구분해서 사용해 주세요.
                 </p>
                 <div th:if="${#lists.isEmpty(groupPurchases)}" class="alert alert-warning small py-2 mb-0">
                     ⚠️ 현재 매장에 등록된 공동구매가 없습니다.
@@ -103,18 +92,20 @@
         </div>
     </div>
 
+    <ol class="ui-pickup-steps" aria-label="수령 처리 순서"><li><span>01</span><strong>상품 준비</strong><small>주문 확인 후 준비완료</small></li><li><span>02</span><strong>QR · 코드 조회</strong><small>방문 고객의 수령증 확인</small></li><li><span>03</span><strong>수령 완료</strong><small>상품 인도 후 최종 확정</small></li></ol>
+
     <!-- 상단 2열: [1] 카메라 QR 스캔기 / [2] 수령 번호 직접 입력 및 단건 조회 -->
     <div class="row g-4 mb-4">
         <!-- 1. 카메라 QR 스캐너 카드 -->
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header bg-white py-3 border-0">
-                    <h2 class="h5 fw-bold mb-0">📷 QR 코드 스캔 (카메라)</h2>
+                    <h2 class="h5 fw-bold mb-0">QR 코드 스캔</h2>
                     <span class="text-muted small">스마트폰이나 웹캠을 통해 고객의 수령 QR 코드를 인식합니다.</span>
                 </div>
-                <div class="card-body p-4 text-center">
+                <div class="card-body p-4 text-center ui-scanner-card">
                     <div id="qr-reader" class="mx-auto rounded border bg-black text-white d-flex align-items-center justify-content-center"
-                         style="max-width: 380px; min-height: 260px;">
+                         style="max-width: 380px; min-height: 230px;">
                         <span class="text-muted small p-3">카메라 시작 버튼을 누르면 스캐너가 활성화됩니다.</span>
                     </div>
 
@@ -122,7 +113,7 @@
                         <button type="button" id="btnStartScan" class="btn btn-success">카메라 스캔 시작</button>
                         <button type="button" id="btnStopScan" class="btn btn-outline-secondary" disabled>스캔 중지</button>
                     </div>
-                    <div id="scanStatus" class="small text-muted mt-2">대기 중</div>
+                    <div id="scanStatus" class="small text-muted mt-2" role="status" aria-live="polite">대기 중</div>
                 </div>
             </div>
         </div>
@@ -131,7 +122,7 @@
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header bg-white py-3 border-0">
-                    <h2 class="h5 fw-bold mb-0">🔢 수령 번호 직접 검색</h2>
+                    <h2 class="h5 fw-bold mb-0">수령 코드로 조회</h2>
                     <span class="text-muted small">카메라 사용이 불가능한 경우 고객의 수령 코드(예: PK-...)를 입력하세요.</span>
                 </div>
                 <div class="card-body p-4">
@@ -139,10 +130,11 @@
                         <div class="input-group">
                             <input type="text" name="searchCode" class="form-control"
                                    placeholder="수령 코드 (예: PK-20261104-ABCD)"
-                                   th:value="${searchCode}" autofocus>
+                                   th:value="${searchCode}" aria-label="수령 코드" autocomplete="off" spellcheck="false">
                             <button class="btn btn-primary px-4" type="submit">조회</button>
                         </div>
                     </form>
+                    <a class="ui-clear-search" th:if="${searchCode != null and !#strings.isEmpty(searchCode)}" th:href="@{/seller/stores/{id}/pickups(id=${store.id})}">검색 초기화</a>
 
                     <div th:if="${searchError}" class="alert alert-warning small py-2 mb-3" th:text="${searchError}">
                         조회 실패
@@ -199,20 +191,29 @@
     </div>
 
     <!-- 하단: 매장 전체 수령 대기/완료 목록 -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h5 fw-bold mb-0">📦 전체 수령 대상 목록</h2>
+    <div class="ui-page-heading d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+        <h2 class="h5 fw-bold mb-0">매장 수령 목록</h2>
         <span class="text-secondary small" th:text="'총 ' + ${#lists.size(pickups)} + '건'">총 0건</span>
     </div>
 
+    <div class="ui-pickup-filters" role="group" aria-label="수령 상태 필터">
+      <button type="button" data-pickup-filter="ALL" class="is-active" aria-pressed="true">전체 <span data-pickup-count="ALL">0</span></button>
+      <button type="button" data-pickup-filter="PREPARING" aria-pressed="false">준비중 <span data-pickup-count="PREPARING">0</span></button>
+      <button type="button" data-pickup-filter="READY" aria-pressed="false">수령대기 <span data-pickup-count="READY">0</span></button>
+      <button type="button" data-pickup-filter="PICKED_UP" aria-pressed="false">수령완료 <span data-pickup-count="PICKED_UP">0</span></button>
+      <button type="button" data-pickup-filter="CANCELLED" aria-pressed="false">취소 <span data-pickup-count="CANCELLED">0</span></button>
+    </div>
+    <p id="pickupFilterStatus" class="ui-pickup-filter-status" role="status" aria-live="polite"></p>
+    <p id="pickupFilterEmpty" class="ui-empty" hidden>선택한 상태의 수령 건이 없어요.</p>
     <div th:if="${#lists.isEmpty(pickups)}" class="card border-0 shadow-sm text-center p-5">
         <p class="text-muted mb-0">아직 등록된 수령 건이 없습니다.</p>
-        <span class="small text-secondary mt-1">상단의 [+ 테스트용 주문(수령건) 생성]을 눌러 테스트해보실 수 있습니다.</span>
+        <span class="small text-secondary mt-1">상단의 [시연용 수령 건 생성]을 눌러 테스트해보실 수 있습니다.</span>
     </div>
 
     <div th:unless="${#lists.isEmpty(pickups)}" class="card border-0 shadow-sm">
-        <div class="table-responsive">
-            <table class="table align-middle table-hover mb-0">
-                <thead class="table-light small">
+        <div class="ui-table-wrap">
+            <table class="ui-table ui-pickup-table">
+                <caption class="sr-only">수령 코드, 상품, 구매자, 준비 상태와 처리 작업</caption><thead>
                 <tr>
                     <th style="width: 20%;">수령 코드</th>
                     <th style="width: 25%;">상품 / 공동구매</th>
@@ -223,25 +224,25 @@
                 </tr>
                 </thead>
                 <tbody class="small">
-                <tr th:each="p : ${pickups}">
-                    <td>
+                <tr class="ui-pickup-row" th:each="p : ${pickups}" th:data-pickup-status="${p.status.name()}">
+                    <td data-label="수령 코드">
                         <strong class="font-monospace text-primary" th:text="${p.pickupCode}">PK-1234</strong>
                         <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 ms-1 btn-show-qr"
                                 th:data-code="${p.pickupCode}"
                                 th:data-title="${p.groupPurchase.product.name}">
-                            QR보기
+                            시연 QR 보기
                         </button>
                     </td>
-                    <td>
+                    <td data-label="상품 · 공동구매">
                         <div class="fw-semibold" th:text="${p.groupPurchase.product.name}">딸기</div>
                         <div class="text-muted small" th:text="${p.groupPurchase.title}">특가 공동구매</div>
                     </td>
-                    <td th:text="${p.quantity} + '개'">1개</td>
-                    <td>
+                    <td data-label="수량" th:text="${p.quantity} + '개'">1개</td>
+                    <td data-label="구매자">
                         <div class="fw-semibold" th:text="${p.customerName != null && !p.customerName.isBlank() ? p.customerName : (p.customer != null ? p.customer.displayName : '구매자')}">고객명</div>
                         <div class="text-muted small" th:text="${p.customerPhone != null && !p.customerPhone.isBlank() ? p.customerPhone : (p.customer != null && p.customer.phoneE164 != null ? p.customer.phoneE164 : '-')}">010-0000-0000</div>
                     </td>
-                    <td>
+                    <td data-label="진행 상태">
                         <span th:if="${p.status.name() == 'PREPARING'}" class="badge bg-warning text-dark">준비중</span>
                         <span th:if="${p.status.name() == 'READY'}" class="badge bg-info text-dark">수령대기</span>
                         <span th:if="${p.status.name() == 'PICKED_UP'}" class="badge bg-success">수령완료</span>
@@ -249,7 +250,7 @@
                         <div th:if="${p.pickedUpAt}" class="text-muted small" style="font-size: 0.75rem;"
                              th:text="${#temporals.format(p.pickedUpAt, 'MM/dd HH:mm')}"></div>
                     </td>
-                    <td class="text-end">
+                    <td data-label="처리" class="text-end">
                         <div th:if="${p.canMarkReady()}" class="d-flex justify-content-end gap-1">
                             <form th:action="@{/seller/stores/{storeId}/pickups/{id}/ready(storeId=${store.id}, id=${p.id})}" method="post">
                                 <button type="submit" class="btn btn-outline-info btn-sm">준비완료</button>
@@ -275,7 +276,7 @@
 </main>
 
 <!-- QR 코드 확인 팝업 (테스트 확인용) -->
-<div class="modal fade" id="qrModal" tabindex="-1" aria-hidden="true" style="background-color: rgba(0,0,0,0.5);">
+<div class="modal fade" id="qrModal" tabindex="-1" aria-hidden="true" aria-labelledby="qrModalTitle">
     <div class="modal-dialog modal-dialog-centered modal-sm">
         <div class="modal-content text-center p-3 shadow">
             <h5 class="fw-bold mb-2" id="qrModalTitle">수령 QR 코드</h5>
@@ -290,12 +291,12 @@
 </div>
 
 <!-- QR 스캔 성공 시 정보 확인 및 수령확정 모달 -->
-<div class="modal fade" id="scanResultModal" tabindex="-1" aria-hidden="true" style="background-color: rgba(0,0,0,0.5);">
+<div class="modal fade" id="scanResultModal" tabindex="-1" aria-hidden="true" aria-labelledby="scanResultTitle">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow">
             <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold">🎯 QR 코드 인식 결과</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <h5 class="modal-title fw-bold" id="scanResultTitle">수령 정보 확인</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
             </div>
             <div class="modal-body">
                 <div class="text-center my-2">
@@ -337,14 +338,14 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+<script th:src="@{/js/vendor/bootstrap.bundle.min.js}"></script>
 
 <script th:inline="javascript">
     document.addEventListener('DOMContentLoaded', function () {
         const storeId = /*[[${store.id}]]*/ 1;
         let html5QrcodeScanner = null;
 
-        // [기능 1] + 테스트용 주문(수령건) 생성 펼침/접힘 토글 (Vanilla JS fallback)
+        // [기능 1] 시연용 수령 건 생성 펼침/접힘 토글 (Vanilla JS fallback)
         const btnToggleTest = document.getElementById('btnToggleTestOrderBox');
         const testOrderBox = document.getElementById('testOrderBox');
         if (btnToggleTest && testOrderBox) {
@@ -354,9 +355,11 @@
                 if (isHidden) {
                     testOrderBox.style.display = 'block';
                     testOrderBox.classList.add('show');
+                    btnToggleTest.setAttribute('aria-expanded', 'true');
                 } else {
                     testOrderBox.style.display = 'none';
                     testOrderBox.classList.remove('show');
+                    btnToggleTest.setAttribute('aria-expanded', 'false');
                 }
             });
         }
@@ -399,7 +402,7 @@
             b.addEventListener('click', closeQrModal);
         });
 
-        // [QR보기] 버튼 클릭 시 QR 코드 생성 및 모달 팝업
+        // [시연 QR 보기] 버튼 클릭 시 QR 코드 생성 및 모달 팝업
         document.querySelectorAll('.btn-show-qr').forEach(btn => {
             btn.addEventListener('click', function (e) {
                 e.preventDefault();
@@ -418,7 +421,7 @@
                             text: code,
                             width: 180,
                             height: 180,
-                            colorDark: '#198754',
+                            colorDark: '#193c2d',
                             colorLight: '#ffffff',
                             correctLevel: QRCode.CorrectLevel.H
                         });
@@ -429,15 +432,8 @@
                     }
                 }
 
-                // 2순위: 이미지 QR API fallback (인터넷/라이브러리 로딩 지연 시 무조건 표시)
                 if (!rendered) {
-                    const qrImg = document.createElement('img');
-                    qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(code);
-                    qrImg.alt = code;
-                    qrImg.width = 180;
-                    qrImg.height = 180;
-                    qrImg.className = 'img-thumbnail';
-                    qrCanvas.appendChild(qrImg);
+                    qrCanvas.textContent = 'QR을 표시하지 못했어요. 아래 수령 코드를 사용해 주세요.';
                 }
 
                 openQrModal();
@@ -448,6 +444,12 @@
         const btnStart = document.getElementById('btnStartScan');
         const btnStop = document.getElementById('btnStopScan');
         const scanStatus = document.getElementById('scanStatus');
+        document.getElementById('scanResultModal').addEventListener('hidden.bs.modal', function () {
+            if (html5QrcodeScanner && html5QrcodeScanner.getState() === 3) {
+                html5QrcodeScanner.resume();
+                scanStatus.textContent = '카메라 작동 중: 다음 QR을 비춰 주세요.';
+            }
+        });
 
         function onScanSuccess(decodedText, decodedResult) {
             scanStatus.textContent = '인식 성공: ' + decodedText + ' (정보 조회 중...)';
@@ -513,6 +515,7 @@
                 if (!html5QrcodeScanner) {
                     html5QrcodeScanner = new Html5Qrcode("qr-reader");
                 }
+                btnStart.disabled = true;
                 scanStatus.textContent = '카메라 준비 중입니다...';
                 html5QrcodeScanner.start(
                     { facingMode: "environment" },
@@ -523,6 +526,7 @@
                     btnStart.disabled = true;
                     btnStop.disabled = false;
                 }).catch(err => {
+                    btnStart.disabled = false;
                     scanStatus.textContent = '카메라 오류: ' + err;
                     alert('카메라를 찾을 수 없거나 권한이 없는 환경입니다. 수동 수령 코드를 입력해주세요.');
                 });
@@ -542,5 +546,7 @@
         }
     });
 </script>
+<div th:replace="~{fragments/ui :: footer}"></div>
+<script th:src="@{/js/pickup-dashboard.js}" defer></script>
 </body>
 </html>

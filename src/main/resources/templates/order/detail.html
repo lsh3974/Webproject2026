@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko"
       xmlns:th="http://www.thymeleaf.org"
       xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
@@ -10,44 +10,18 @@
         주문 상세 - 시흥한바구니
     </title>
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
-          rel="stylesheet"
-          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
-          crossorigin="anonymous">
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
     <!-- QR 코드 생성 라이브러리 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script th:src="@{/js/vendor/qrcode.min.js}"></script>
 </head>
-<body class="bg-light">
+<body class="ui-app ui-order ui-order-detail">
 
-<nav class="navbar bg-white border-bottom">
-    <div class="container d-flex flex-wrap gap-3">
-        <a class="navbar-brand fw-bold text-success" th:href="@{/}">
-            시흥한바구니
-        </a>
+<div th:replace="~{fragments/ui :: buyerHeader}"></div>
 
-        <div class="d-flex align-items-center gap-3">
-            <a th:href="@{/group-purchases}"
-               class="text-decoration-none text-secondary">
-                공동구매 둘러보기
-            </a>
-
-            <a th:href="@{/orders}"
-               class="text-decoration-none text-secondary">
-                내 주문 목록
-            </a>
-
-            <a th:href="@{/}"
-               class="text-decoration-none text-secondary">
-                홈으로
-            </a>
-        </div>
-    </div>
-</nav>
-
-<main class="container py-5" style="max-width: 820px;">
+<main id="main" class="container ui-main">
 
     <!-- 상단 이동 및 주문 상태 -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="ui-order-status-head d-flex flex-wrap gap-3 justify-content-between align-items-center mb-3">
         <a th:href="@{/orders}"
            class="text-decoration-none text-secondary small">
             &larr; 내 주문 · 수량 예약 목록으로
@@ -141,41 +115,41 @@
         </div>
     </div>
 
-    <!-- 결제 완료 시 수령 QR 카드 (11번 기능) -->
-    <div th:if="${order.status.name() == 'PAID' and pickup != null}"
-         class="card border-0 shadow-sm mb-4 border-top border-4 border-success">
-        <div class="card-body p-4 text-center">
-            <span th:if="${pickup.status.name() == 'PREPARING'}" class="badge bg-warning text-dark mb-2 px-3 py-1">상품 준비중</span>
-            <span th:if="${pickup.status.name() == 'READY'}" class="badge bg-info text-dark mb-2 px-3 py-1">매장 수령 가능(준비완료)</span>
-            <span th:if="${pickup.status.name() == 'PICKED_UP'}" class="badge bg-success mb-2 px-3 py-1">수령 완료</span>
-            <span th:if="${pickup.status.name() == 'CANCELLED'}" class="badge bg-secondary mb-2 px-3 py-1">수령 취소</span>
-
-            <div th:if="${pickup.canComplete()}">
-                <h2 class="h5 fw-bold mb-1">매장 수령증 & QR 코드</h2>
-                <p class="text-secondary small mb-3">
-                    매장에 방문하여 아래 QR 코드 또는 수령 번호를 점원에게 보여주시면 상품을 수령하실 수 있습니다.
-                </p>
-
-                <div id="orderPickupQr" class="d-flex justify-content-center my-3"></div>
-
-                <div class="bg-light p-3 rounded d-inline-block mx-auto mb-2">
-                    <span class="text-muted small d-block">수령 코드</span>
-                    <strong class="fs-5 font-monospace text-dark" th:text="${pickup.pickupCode}" id="orderPickupCodeText">PK-CODE</strong>
-                </div>
-
-            </div>
-
-            <div th:if="${pickup.status.name() == 'PICKED_UP'}" class="alert alert-success small mb-0 mt-2">
-                ✓ <span th:text="${#temporals.format(pickup.pickedUpAt, 'yyyy-MM-dd HH:mm')}"></span> 에 수령이 완료되었습니다.
-            </div>
+    <!-- A receipt is shown only for the server-authorized pickup state. -->
+    <section th:if="${order.status.name() == 'PAID' and pickup != null}" class="card ui-pickup-ticket mb-4" aria-labelledby="pickupTicketTitle">
+      <div class="card-body">
+        <div class="ui-ticket-heading"><div><span class="ui-kicker">PICK UP IN YOUR NEIGHBORHOOD</span><h2 id="pickupTicketTitle">매장 수령 안내</h2></div>
+          <span th:if="${pickup.status.name() == 'PREPARING'}" class="ui-pickup-badge preparing">상품 준비중</span>
+          <span th:if="${pickup.status.name() == 'READY'}" class="ui-pickup-badge ready">수령대기</span>
+          <span th:if="${pickup.status.name() == 'PICKED_UP'}" class="ui-pickup-badge complete">수령 완료</span>
+          <span th:if="${pickup.status.name() == 'CANCELLED'}" class="ui-pickup-badge cancelled">수령 취소</span>
         </div>
-    </div>
+        <div th:if="${pickup.status.name() == 'PREPARING'}" class="ui-pickup-notice">
+          <strong>수령 준비가 끝나면 QR이 표시돼요.</strong>
+          <p>공동구매가 성공하고 매장에서 준비완료 처리하면 이 화면에서 QR과 수령 코드를 확인할 수 있어요. 방문 전 주문 상태와 수령 일정을 확인해 주세요.</p>
+          <a class="btn btn-outline-success" th:href="@{/orders/{id}(id=${order.id})}">수령 상태 새로고침</a>
+        </div>
+        <div th:if="${pickup.canComplete()}" class="ui-ticket-content">
+          <div class="ui-qr-frame"><div id="orderPickupQr" th:data-pickup-code="${pickup.pickupCode}" aria-label="매장에 제시할 수령 QR 코드"></div><span>매장 직원에게 보여 주세요</span></div>
+          <div class="ui-ticket-info"><span class="ui-kicker">YOUR PICKUP CODE</span><h3>QR 또는 수령 코드를 제시하세요.</h3>
+            <p>매장에서 상품과 수량을 확인한 뒤 수령이 완료돼요. 카메라로 인식하지 못하면 아래 코드를 직원에게 알려 주세요.</p>
+            <div class="ui-code-box"><span>수령 코드</span><strong id="orderPickupCodeText" th:text="${pickup.pickupCode}">PK-CODE</strong><button type="button" id="copyPickupCode" class="btn btn-outline-success">코드 복사</button></div>
+            <p id="pickupCopyStatus" class="ui-copy-status" role="status" aria-live="polite"></p>
+            <p class="ui-ticket-store"><strong th:text="${order.groupPurchase.store.name}">수령 매장</strong><br><span th:text="${order.groupPurchase.store.address}">매장 주소</span></p>
+            <p class="ui-pickup-private">수령 코드는 상품을 받는 데 사용돼요. 매장에 방문했을 때 제시해 주세요.</p>
+          </div>
+        </div>
+        <div th:if="${pickup.status.name() == 'PICKED_UP'}" class="ui-pickup-notice complete"><strong>상품 수령이 완료됐어요.</strong><p><span th:text="${#temporals.format(pickup.pickedUpAt, 'yyyy-MM-dd HH:mm')}"></span> · 이용해 주셔서 감사합니다.</p></div>
+        <div th:if="${pickup.status.name() == 'CANCELLED'}" class="ui-pickup-notice"><strong>취소된 수령증이에요.</strong><p>이 수령증으로는 상품을 받을 수 없어요. 주문과 환불 상태를 확인해 주세요.</p></div>
+        <p th:if="${pickup.status.name() == 'READY' and !pickup.canComplete()}" class="ui-pickup-notice">현재 주문 또는 모집 상태에서는 수령할 수 없어요. 상태를 새로고침해 주세요.</p>
+      </div>
+    </section>
 
     <!-- 주문 상세 카드 -->
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="card ui-order-receipt border-0 shadow-sm mb-4">
         <div class="card-body p-4 p-md-5">
 
-            <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-4">
+            <div class="d-flex flex-wrap gap-3 justify-content-between align-items-start border-bottom pb-3 mb-4">
                 <div>
                     <span class="text-muted small">주문 번호</span>
 
@@ -221,9 +195,7 @@
                         <div class="text-muted small">예약 수량 · 단가</div>
 
                         <div class="fw-semibold">
-                            <span th:text="${order.quantity} + ' ' + ${order.groupPurchase.product.unit}">
-                                2 개
-                            </span>
+                            <span th:text="${order.quantity}">2</span>
 
                             ×
 
@@ -316,7 +288,7 @@
 
             <div th:replace="~{order/refund-actions :: actions(${order}, ${canRequestRefund})}"></div>
             <!-- 상태별 동작 버튼 -->
-            <div class="mt-4 pt-3 border-top d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="ui-order-actions mt-4 pt-3 border-top d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
                     <a th:href="@{/orders}"
                        class="btn btn-outline-secondary">
@@ -392,28 +364,10 @@
     })();
 </script>
 
-<script th:if="${pickup != null and pickup.canComplete()}"
-        th:inline="javascript">
-    document.addEventListener('DOMContentLoaded', function() {
-        const qrContainer = document.getElementById('orderPickupQr');
-        const pickupCode = /*[[${pickup.pickupCode}]]*/ '';
-        if (qrContainer && pickupCode) {
-            new QRCode(qrContainer, {
-                text: pickupCode,
-                width: 160,
-                height: 160,
-                colorDark: '#198754',
-                colorLight: '#ffffff',
-                correctLevel: QRCode.CorrectLevel.H
-            });
-        }
-    });
-</script>
+<script th:src="@{/js/pickup-ticket.js}" defer></script>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
-        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYnnbp8sPUbStPfPzUe4bcfzptbERvPsmvsmP5tFw4G"
-        crossorigin="anonymous">
-</script>
+<script th:src="@{/js/vendor/bootstrap.bundle.min.js}"></script>
 
+<div th:replace="~{fragments/ui :: footer}"></div>
 </body>
 </html>

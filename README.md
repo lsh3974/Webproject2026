@@ -434,8 +434,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - `GET /group-purchases/{id}`: 상품 설명, 가격, 현재·목표·최대 수량, 마감과 수령 정보.
 - 초기 `siheung_ui_20261023_fixed.html`의 색상, 카드, 레이아웃을 적용했다. 배너 이미지는 해당 시안에서 추출했다.
 - `GroupPurchase`, `Product`, `Store`와 기존 `group_purchases` 테이블을 재사용한다. 새 DB SQL은 없다.
-- SecurityConfig와 로그인 정책은 변경하지 않는다. 현재 main 기준으로 목록·상세 모두 로그인해야 접근 가능하다.
-- 비로그인 공개 여부는 팀 결정 후 별도 반영한다. 사용자 세션 키를 새로 만들지 않는다.
+- 목록·상세 GET은 기존 정책대로 비회원도 공개 대상만 조회할 수 있다. 예약·결제·내 주문은 로그인이 필요하다.
+- 사용자 정보는 기존 LoginUser를 사용하며 새 세션 키를 추가하지 않는다.
 
 ### 이번 구현의 조회 조건 (팀 검토 대상)
 
@@ -456,7 +456,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - 진행률은 현재/목표 수량이며 화면 막대는 0~100%로 제한한다. 현재 수량 원본은 별도로 표시한다.
 - 잔여 주문 가능 수량, 수량 예약·차감, 주문 생성 및 결제 처리는 하지 않는다.
 - 8번·9번 담당은 예약 수량 저장 위치, `current_quantity`의 의미, 판매 상한 및 성공 시점을 먼저 확정한다.
-- 주문 버튼 대신 현재 조회만 가능한 상태를 명시한다.
+- 상세의 예약 버튼은 기존 예약·결제 흐름으로 연결한다. QR 수령 화면의 디자인 기준은 docs/UI-PICKUP.md를 따른다.
 
 ### 로컬 확인
 
@@ -465,7 +465,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 3. 별도의 판매자 테스트 계정을 로컬 DB에서 SELLER로 설정하고 재로그인한다.
 4. `/seller/stores`에서 ACTIVE 매장을 만들고, ON_SALE 상품과 현재 진행 중인 OPEN 모집을 만든다.
 5. 검색·필터, 카드의 상세 링크, 빈 결과, 비공개 모집의 상세 404를 확인한다.
-6. 로그아웃 후 두 조회 주소 모두 로그인 페이지로 이동하는지 확인한다.
+6. 로그아웃 후에도 목록·상세는 조회되고 예약 진입 시에는 로그인이 필요한지 확인한다.
 
 ### 적용 파일
 
@@ -474,7 +474,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 - `GroupPurchaseView`: 고객 화면용 데이터. 회원 비밀번호 등 User 엔티티는 전달하지 않는다.
 - 기존 `GroupPurchaseRepository`: Specification 조회와 store/product EntityGraph만 추가한다. 판매자용 기존 메서드는 유지한다.
 - `templates/group-purchases/`: 목록·상세·공통 헤더/푸터.
-- `static/css/group-purchases.css`, `static/images/catalog-hero.webp`: 화면 리소스.
+- `static/css/market.css`, `static/images/ui/`, `templates/fragments/ui.html`: 공통 화면 리소스.
 - `index.html`: 홈에 목록 진입 링크 추가.
 
 ### 수정 사항
@@ -710,3 +710,10 @@ POST 요청은 Spring Security의 CSRF 검증을 유지합니다.
 - `PickupServiceTest`: 고유 수령 코드 생성, PAID 주문 대상 수령증 발급/조회, 매장 소유권 및 교차 검증, 환불 주문 수령 차단 등 단위 테스트 8개 통과
 - `SellerPickupIntegrationTest`: 판매자 수령 목록 렌더링, QR 스캔/조회(전화번호 마스킹), 준비완료(READY), QR 스캔 수령완료(PICKED_UP), 수령 완료 후 환불 차단(409 CONFLICT), 타 매장 조작 차단(400) 통합 테스트 10개 통과. 모집 성공 전 수령, 준비완료 건너뛰기, 늦은 준비완료 저장, 동시 발급을 회귀 테스트로 검증
 - **전체 프로젝트 테스트 (`mvnw test`)**: 결제, 환불, 동시성 선점, 공구 마감 등 **전체 132개 테스트 통과**
+
+## 동네 장터 디자인 · 11번 QR 수령 통합
+
+최신 main의 결제·환불·QR 수령 기능에 기존 그린·크림 디자인을 적용했습니다.
+구매자 수령증, 판매자 스캔·코드 조회·상태별 목록과 결제 화면을 공통 스타일로 맞췄습니다.
+운영 Java·SQL·DB 연결·권한 정책 변경은 없습니다.
+작업 기준·담당 파일·검증·로컬 적용 안내는 [UI-PICKUP.md](docs/UI-PICKUP.md)를 확인하세요.

@@ -119,7 +119,8 @@ class GroupPurchaseBrowseIntegrationTest {
                 .andExpect(content().string(containsString("name=\"_csrf\""))).andReturn();
         var detailResult = mvc.perform(get("/group-purchases/" + gp.getId()).with(member())).andExpect(status().isOk())
                 .andExpect(content().string(containsString("시흥시 정왕동")))
-                .andExpect(content().string(containsString("주문 신청은 아직 지원하지 않습니다"))).andReturn();
+                .andExpect(content().string(containsString("href=\"/orders/new?groupPurchaseId=" + gp.getId() + "\"")))
+                .andExpect(content().string(not(containsString("주문 신청은 아직 지원하지 않습니다")))).andReturn();
         String previewDirectory = System.getProperty("catalog.previewDir");
         if (previewDirectory != null) {
             Path directory = Files.createDirectories(Path.of(previewDirectory));
