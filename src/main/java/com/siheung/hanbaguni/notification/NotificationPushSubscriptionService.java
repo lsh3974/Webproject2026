@@ -44,15 +44,20 @@ public class NotificationPushSubscriptionService {
         subscriptions.save(new PushSubscription(user, request.endpoint(), request.keys().p256dh(), request.keys().auth()));
     }
 
+    /**
+     * 로그아웃한 브라우저의 구독만 해제한다.
+     * 같은 계정으로 등록된 다른 기기의 구독은 유지한다.
+     */
     @Transactional
-    public void deactivateAllForUser(Long userId) {
-        subscriptions.findByUserIdAndActiveTrue(userId).forEach(PushSubscription::deactivate);
+    public void deactivateForUserAndEndpoint(Long userId, String endpoint) {
+        if (endpoint == null || endpoint.isBlank()) return;
+        subscriptions.findByEndpoint(endpoint)
+                .filter(subscription -> subscription.getUser().getId().equals(userId))
+                .ifPresent(PushSubscription::deactivate);
     }
 
     @Transactional
     public void unsubscribe(Long userId, String endpoint) {
-        if (endpoint == null || endpoint.isBlank()) return;
-        subscriptions.findByEndpoint(endpoint).filter(s -> s.getUser().getId().equals(userId))
-                .ifPresent(PushSubscription::deactivate);
+        deactivateForUserAndEndpoint(userId, endpoint);
     }
 }

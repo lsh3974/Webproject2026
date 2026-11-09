@@ -44,6 +44,25 @@ public class NotificationDeliveryTransactions {
                 ps != null ? ps.getP256dh() : null, ps != null ? ps.getAuth() : null);
     }
 
+    /**
+     * PUSH 발송 직전, 대기 delivery의 수신자와 현재 구독 소유자가 일치하는지 다시 확인한다.
+     * 구독 소유권은 동일 endpoint를 다른 계정이 등록하면 이전될 수 있으므로
+     * delivery 생성 시점의 구독 정보만 신뢰하면 안 된다.
+     */
+    @Transactional(readOnly = true)
+    public boolean isPushSubscriptionOwnedByRecipient(Long deliveryId) {
+        NotificationDelivery delivery = deliveries.findById(deliveryId).orElseThrow();
+        if (delivery.getChannel() != NotificationDelivery.Channel.PUSH) return true;
+
+        PushSubscription subscription = delivery.getPushSubscription();
+        if (subscription == null) return false;
+
+        Long recipientUserId = delivery.getNotification().getUser().getId();
+        return subscriptions.findByIdAndUserId(subscription.getId(), recipientUserId)
+                .filter(PushSubscription::isActive)
+                .isPresent();
+    }
+
     @Transactional
     public java.util.List<Long> claimUnknownForReconciliation() {
         var rows = deliveries.findUnknownForReconciliation(LocalDateTime.now(), PageRequest.of(0, 50));

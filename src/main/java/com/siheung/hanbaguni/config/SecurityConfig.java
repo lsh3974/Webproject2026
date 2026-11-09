@@ -54,7 +54,9 @@ public class SecurityConfig {
                         .clearAuthentication(true)
                         .addLogoutHandler((request, response, authentication) -> {
                             if (authentication != null && authentication.getPrincipal() instanceof com.siheung.hanbaguni.security.LoginUser user) {
-                                pushSubscriptions.deactivateAllForUser(user.getUserId());
+                                // 브라우저가 로그아웃 요청에 현재 endpoint를 전달한 경우에만 해당 기기 구독을 해제한다.
+                                pushSubscriptions.deactivateForUserAndEndpoint(
+                                        user.getUserId(), request.getParameter("pushEndpoint"));
                             }
                         })
                         .deleteCookies("JSESSIONID")

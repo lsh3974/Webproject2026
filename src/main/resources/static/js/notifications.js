@@ -201,11 +201,36 @@
         }
     });
 
-    // 서버 로그아웃 처리에서 현재 계정의 구독을 비활성화한다.
-    // 브라우저의 PushSubscription 자체는 유지해 다음 로그인 계정이 안전하게 소유권을 인계받을 수 있다.
+    // 로그아웃 시 현재 브라우저의 endpoint만 서버에 전달하고 브라우저 구독도 해제한다.
+    // 계정의 다른 기기 구독은 서버에서 건드리지 않는다.
     document.querySelectorAll('form[action$="/logout"]').forEach((form) => {
-        form.addEventListener('submit', () => {
+        let logoutInProgress = false;
+        form.addEventListener('submit', async (event) => {
+            if (logoutInProgress) return;
+            event.preventDefault();
+            logoutInProgress = true;
             document.body.classList.remove('notification-popover-open');
+
+            try {
+                const registration = await navigator.serviceWorker?.getRegistration();
+                const subscription = await registration?.pushManager?.getSubscription();
+                if (subscription) {
+                    let endpointInput = form.querySelector('input[name="pushEndpoint"]');
+                    if (!endpointInput) {
+                        endpointInput = document.createElement('input');
+                        endpointInput.type = 'hidden';
+                        endpointInput.name = 'pushEndpoint';
+                        form.appendChild(endpointInput);
+                    }
+                    endpointInput.value = subscription.endpoint;
+                    // 실패하더라도 endpoint는 로그아웃 POST에 포함되어 서버 구독을 비활성화한다.
+                    try { await subscription.unsubscribe(); } catch (_) { /* 서버 측 비활성화를 계속 진행 */ }
+                }
+            } catch (_) {
+                // 푸시 미지원/미등록 브라우저에서도 로그아웃은 정상 진행한다.
+            }
+
+            HTMLFormElement.prototype.submit.call(form);
         });
     });
 
