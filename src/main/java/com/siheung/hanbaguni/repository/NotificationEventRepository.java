@@ -8,9 +8,17 @@ import org.springframework.data.jpa.repository.Query;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface NotificationEventRepository extends JpaRepository<NotificationEvent, Long> {
     boolean existsByEventKey(String eventKey);
+
+    @Query("select e.id from NotificationEvent e where e.status = com.siheung.hanbaguni.notification.NotificationEvent.EventStatus.PENDING and e.nextAttemptAt <= :now order by e.id")
+    List<Long> findDueIds(LocalDateTime now, Pageable pageable);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select e from NotificationEvent e where e.id = :id")
+    Optional<NotificationEvent> findByIdForUpdate(Long id);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select e from NotificationEvent e where e.status = com.siheung.hanbaguni.notification.NotificationEvent.EventStatus.PENDING and e.nextAttemptAt <= :now order by e.id")
     List<NotificationEvent> findDueForProcessing(LocalDateTime now, Pageable pageable);

@@ -27,12 +27,11 @@ public class WebPushNotificationSender implements NotificationChannelSender {
         }
         try {
             if (Security.getProvider("BC") == null) Security.addProvider(new BouncyCastleProvider());
-            String url = data.targetUrl().startsWith("/") && !data.targetUrl().startsWith("//")
-                    ? data.targetUrl() : "/notifications";
+            // 잠금 화면/공용 브라우저에 거래 정보가 노출되지 않도록 최소 정보만 전송한다.
             byte[] payload = objectMapper.writeValueAsBytes(Map.of(
-                    "title", data.title(),
-                    "body", data.body(),
-                    "url", url
+                    "title", "시흥한바구니 알림",
+                    "body", "새 알림이 있어요. 로그인 후 확인해 주세요.",
+                    "url", "/notifications"
             ));
             var pushService = new nl.martijndwars.webpush.PushService(
                     config.getPublicKey(), config.getPrivateKey(), config.getSubject());

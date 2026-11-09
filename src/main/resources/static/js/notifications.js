@@ -49,7 +49,7 @@
         } catch (_) { /* 알림 개수 조회 실패는 현재 화면을 막지 않습니다. */ }
     }
 
-    const dropdown = document.getElementById('notificationDropdown');
+    const dropdown = document.getElementById('notificationPopover');
     const dropdownList = dropdown?.querySelector('.notification-dropdown-list');
     const bellButton = document.querySelector('.notification-bell-button');
     let recentLoaded = false;
@@ -88,24 +88,36 @@
         }
     }
 
+    const backdrop = document.getElementById('notificationPopoverBackdrop');
+    const closeButton = document.querySelector('.notification-popover-close');
     const bellWrap = document.querySelector('.notification-bell-wrap');
     function setDropdownOpen(open) {
         if (!dropdown || !bellButton) return;
         dropdown.classList.toggle('is-open', open);
+        backdrop?.classList.toggle('is-open', open);
+        dropdown.setAttribute('aria-hidden', String(!open));
         bellButton.setAttribute('aria-expanded', String(open));
-        if (open) loadRecent();
+        document.body.classList.toggle('notification-popover-open', open);
+        if (open) {
+            loadRecent();
+            window.setTimeout(() => closeButton?.focus(), 50);
+        }
     }
     bellButton?.addEventListener('click', (event) => {
         event.stopPropagation();
         setDropdownOpen(!dropdown?.classList.contains('is-open'));
     });
-    document.addEventListener('click', (event) => {
-        if (bellWrap && !bellWrap.contains(event.target)) setDropdownOpen(false);
+    backdrop?.addEventListener('click', () => setDropdownOpen(false));
+    closeButton?.addEventListener('click', () => {
+        setDropdownOpen(false);
+        bellButton?.focus();
     });
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
-            setDropdownOpen(false);
-            bellButton?.focus();
+            if (dropdown?.classList.contains('is-open')) {
+                setDropdownOpen(false);
+                bellButton?.focus();
+            }
         }
     });
     dropdownList?.addEventListener('click', async (event) => {
@@ -187,6 +199,14 @@
         } catch (error) {
             if (status) status.textContent = error.message || '푸시 연결 해제에 실패했습니다.';
         }
+    });
+
+    // 서버 로그아웃 처리에서 현재 계정의 구독을 비활성화한다.
+    // 브라우저의 PushSubscription 자체는 유지해 다음 로그인 계정이 안전하게 소유권을 인계받을 수 있다.
+    document.querySelectorAll('form[action$="/logout"]').forEach((form) => {
+        form.addEventListener('submit', () => {
+            document.body.classList.remove('notification-popover-open');
+        });
     });
 
     updateUnreadCounts();

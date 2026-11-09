@@ -8,12 +8,14 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.HttpMethod;
 import com.siheung.hanbaguni.security.RoleBasedLoginSuccessHandler;
+import com.siheung.hanbaguni.notification.NotificationPushSubscriptionService;
 
 @Configuration
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http,RoleBasedLoginSuccessHandler loginSuccessHandler)
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, RoleBasedLoginSuccessHandler loginSuccessHandler,
+                                                   NotificationPushSubscriptionService pushSubscriptions)
             throws Exception {
 
         http.authorizeHttpRequests(auth -> auth
@@ -50,6 +52,11 @@ public class SecurityConfig {
                         .logoutSuccessUrl("/login?logout")
                         .invalidateHttpSession(true)
                         .clearAuthentication(true)
+                        .addLogoutHandler((request, response, authentication) -> {
+                            if (authentication != null && authentication.getPrincipal() instanceof com.siheung.hanbaguni.security.LoginUser user) {
+                                pushSubscriptions.deactivateAllForUser(user.getUserId());
+                            }
+                        })
                         .deleteCookies("JSESSIONID")
                 );
 
