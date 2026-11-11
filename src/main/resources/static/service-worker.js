@@ -1,20 +1,17 @@
 self.addEventListener('push', (event) => {
-    let data = {};
-    try { data = event.data ? event.data.json() : {}; } catch (_) { data = { body: event.data?.text() || '' }; }
-    const title = data.title || '시흥한바구니 알림';
+    // 서버가 어떤 내용을 보내더라도 공용 기기 잠금 화면에는 민감정보를 노출하지 않는다.
     const options = {
-        body: data.body || '새로운 알림이 도착했습니다.',
-        data: { url: data.url || '/notifications' },
-        tag: data.tag || undefined,
+        body: '새 알림이 있어요. 로그인 후 확인해 주세요.',
+        data: { url: '/notifications' },
+        tag: 'hanbaguni-notification',
         renotify: false
     };
-    event.waitUntil(self.registration.showNotification(title, options));
+    event.waitUntil(self.registration.showNotification('시흥한바구니 알림', options));
 });
 
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const target = new URL(event.notification.data?.url || '/notifications', self.location.origin);
-    if (target.origin !== self.location.origin) return;
+    const target = new URL('/notifications', self.location.origin);
     event.waitUntil((async () => {
         const clientsList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
         for (const client of clientsList) {

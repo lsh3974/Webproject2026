@@ -49,7 +49,7 @@
         } catch (_) { /* 알림 개수 조회 실패는 현재 화면을 막지 않습니다. */ }
     }
 
-    const dropdown = document.getElementById('notificationDropdown');
+    const dropdown = document.getElementById('notificationPopover');
     const dropdownList = dropdown?.querySelector('.notification-dropdown-list');
     const bellButton = document.querySelector('.notification-bell-button');
     let recentLoaded = false;
@@ -88,24 +88,36 @@
         }
     }
 
+    const backdrop = document.getElementById('notificationPopoverBackdrop');
+    const closeButton = document.querySelector('.notification-popover-close');
     const bellWrap = document.querySelector('.notification-bell-wrap');
     function setDropdownOpen(open) {
         if (!dropdown || !bellButton) return;
         dropdown.classList.toggle('is-open', open);
+        backdrop?.classList.toggle('is-open', open);
+        dropdown.setAttribute('aria-hidden', String(!open));
         bellButton.setAttribute('aria-expanded', String(open));
-        if (open) loadRecent();
+        document.body.classList.toggle('notification-popover-open', open);
+        if (open) {
+            loadRecent();
+            window.setTimeout(() => closeButton?.focus(), 50);
+        }
     }
     bellButton?.addEventListener('click', (event) => {
         event.stopPropagation();
         setDropdownOpen(!dropdown?.classList.contains('is-open'));
     });
-    document.addEventListener('click', (event) => {
-        if (bellWrap && !bellWrap.contains(event.target)) setDropdownOpen(false);
+    backdrop?.addEventListener('click', () => setDropdownOpen(false));
+    closeButton?.addEventListener('click', () => {
+        setDropdownOpen(false);
+        bellButton?.focus();
     });
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
-            setDropdownOpen(false);
-            bellButton?.focus();
+            if (dropdown?.classList.contains('is-open')) {
+                setDropdownOpen(false);
+                bellButton?.focus();
+            }
         }
     });
     dropdownList?.addEventListener('click', async (event) => {
@@ -187,6 +199,39 @@
         } catch (error) {
             if (status) status.textContent = error.message || '푸시 연결 해제에 실패했습니다.';
         }
+    });
+
+    // 로그아웃 시 현재 브라우저의 endpoint만 서버에 전달하고 브라우저 구독도 해제한다.
+    // 계정의 다른 기기 구독은 서버에서 건드리지 않는다.
+    document.querySelectorAll('form[action$="/logout"]').forEach((form) => {
+        let logoutInProgress = false;
+        form.addEventListener('submit', async (event) => {
+            if (logoutInProgress) return;
+            event.preventDefault();
+            logoutInProgress = true;
+            document.body.classList.remove('notification-popover-open');
+
+            try {
+                const registration = await navigator.serviceWorker?.getRegistration();
+                const subscription = await registration?.pushManager?.getSubscription();
+                if (subscription) {
+                    let endpointInput = form.querySelector('input[name="pushEndpoint"]');
+                    if (!endpointInput) {
+                        endpointInput = document.createElement('input');
+                        endpointInput.type = 'hidden';
+                        endpointInput.name = 'pushEndpoint';
+                        form.appendChild(endpointInput);
+                    }
+                    endpointInput.value = subscription.endpoint;
+                    // 실패하더라도 endpoint는 로그아웃 POST에 포함되어 서버 구독을 비활성화한다.
+                    try { await subscription.unsubscribe(); } catch (_) { /* 서버 측 비활성화를 계속 진행 */ }
+                }
+            } catch (_) {
+                // 푸시 미지원/미등록 브라우저에서도 로그아웃은 정상 진행한다.
+            }
+
+            HTMLFormElement.prototype.submit.call(form);
+        });
     });
 
     updateUnreadCounts();

@@ -34,21 +34,30 @@ public class NotificationPushSubscriptionService {
         var existing = subscriptions.findByEndpoint(request.endpoint());
         if (existing.isPresent()) {
             PushSubscription subscription = existing.get();
-            if (!subscription.getUser().getId().equals(userId)) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "다른 계정에 등록된 푸시 구독입니다.");
-            }
-            subscription.updateKeys(request.keys().p256dh(), request.keys().auth());
-            subscription.activate();
+            User user = users.findById(userId).orElseThrow();
+            // 브라우저 endpoint는 계정이 아니라 브라우저 프로필에 귀속되므로
+            // 로그인한 현재 계정으로 소유권을 이전한다.
+            subscription.transferTo(user, request.keys().p256dh(), request.keys().auth());
             return;
         }
         User user = users.findById(userId).orElseThrow();
         subscriptions.save(new PushSubscription(user, request.endpoint(), request.keys().p256dh(), request.keys().auth()));
     }
 
+    /**
+     * 로그아웃한 브라우저의 구독만 해제한다.
+     * 같은 계정으로 등록된 다른 기기의 구독은 유지한다.
+     */
+    @Transactional
+    public void deactivateForUserAndEndpoint(Long userId, String endpoint) {
+        if (endpoint == null || endpoint.isBlank()) return;
+        subscriptions.findByEndpoint(endpoint)
+                .filter(subscription -> subscription.getUser().getId().equals(userId))
+                .ifPresent(PushSubscription::deactivate);
+    }
+
     @Transactional
     public void unsubscribe(Long userId, String endpoint) {
-        if (endpoint == null || endpoint.isBlank()) return;
-        subscriptions.findByEndpoint(endpoint).filter(s -> s.getUser().getId().equals(userId))
-                .ifPresent(PushSubscription::deactivate);
+        deactivateForUserAndEndpoint(userId, endpoint);
     }
 }

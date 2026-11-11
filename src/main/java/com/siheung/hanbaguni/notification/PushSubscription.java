@@ -25,6 +25,12 @@ public class PushSubscription {
         this.createdAt = LocalDateTime.now();
     }
     public void updateKeys(String p256dh, String auth) { this.p256dh = p256dh; this.auth = auth; }
+    public void transferTo(User user, String p256dh, String auth) {
+        this.user = user;
+        this.p256dh = p256dh;
+        this.auth = auth;
+        this.active = true;
+    }
     public void markUsed() { this.lastUsedAt = LocalDateTime.now(); }
     public void deactivate() { this.active = false; }
     public void activate() { this.active = true; }

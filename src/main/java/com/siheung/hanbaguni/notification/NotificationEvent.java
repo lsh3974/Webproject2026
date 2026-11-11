@@ -55,5 +55,18 @@ public class NotificationEvent {
         this.lastError = null;
     }
 
+    public void recordFailure(RuntimeException exception) {
+        attemptCount++;
+        lastError = exception.getClass().getSimpleName() + ": " + String.valueOf(exception.getMessage());
+        if (lastError.length() > 1000) lastError = lastError.substring(0, 1000);
+        lockedUntil = null;
+        if (attemptCount >= 5) {
+            status = EventStatus.FAILED;
+        } else {
+            status = EventStatus.PENDING;
+            nextAttemptAt = LocalDateTime.now().plusSeconds(Math.min(3600, 30L * (1L << (attemptCount - 1))));
+        }
+    }
+
     public enum EventStatus { PENDING, PROCESSING, PROCESSED, FAILED }
 }

@@ -62,6 +62,13 @@ public class NotificationDeliveryJob {
                 }
                 NotificationChannelSender sender = byChannel.get(data.channel());
                 if (sender == null) throw new NotificationSendException("채널 발송기가 등록되지 않았습니다.", NotificationSendException.Outcome.PERMANENT);
+                // PUSH는 delivery 생성 이후 구독 소유권이 이전될 수 있으므로 실제 발송 직전에 재검증한다.
+                if (data.channel() == NotificationDelivery.Channel.PUSH
+                        && !transactions.isPushSubscriptionOwnedByRecipient(id)) {
+                    transactions.markSkipped(id, "발송 직전 브라우저 구독 소유자가 알림 수신자와 달라 발송을 건너뛰었습니다.");
+                    log.info("푸시 구독 소유자 불일치로 발송을 건너뜀 deliveryId={}", id);
+                    continue;
+                }
                 String providerId = sender.send(data);
                 transactions.markSent(id, providerId);
             } catch (NotificationSendException exception) {
