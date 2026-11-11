@@ -52,11 +52,10 @@
     const dropdown = document.getElementById('notificationPopover');
     const dropdownList = dropdown?.querySelector('.notification-dropdown-list');
     const bellButton = document.querySelector('.notification-bell-button');
-    let recentLoaded = false;
     let loadingRecent = false;
 
-    async function loadRecent(force = false) {
-        if (!dropdownList || loadingRecent || (recentLoaded && !force)) return;
+    async function loadRecent() {
+        if (!dropdownList || loadingRecent) return;
         loadingRecent = true;
         dropdownList.setAttribute('aria-busy', 'true');
         dropdownList.innerHTML = '<div class="notification-dropdown-state">알림을 불러오는 중...</div>';
@@ -79,7 +78,6 @@
                         ${item.read ? '' : '<span class="notification-dropdown-new" aria-label="읽지 않음"></span>'}
                     </button>`).join('');
             }
-            recentLoaded = true;
         } catch (error) {
             dropdownList.innerHTML = `<div class="notification-dropdown-state">${escapeHtml(error.message || '알림을 불러오지 못했습니다.')}</div>`;
         } finally {
@@ -133,7 +131,6 @@
             });
             if (!response.ok) throw new Error('알림을 읽음 처리하지 못했습니다.');
             const result = await response.json();
-            recentLoaded = false;
             await updateUnreadCounts();
             window.location.assign(result.redirectUrl || '/notifications');
         } catch (error) {
