@@ -4,22 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>공동구매 모집 수정 - 시흥한바구니</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 </head>
-<body class="bg-light">
+<body class="ui-app ui-seller">
 
-<nav class="navbar bg-white border-bottom">
-    <div class="container">
-        <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
-        <a th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}" class="text-decoration-none text-secondary">
-            공동구매 목록으로
-        </a>
-    </div>
-    <span th:replace="~{notifications/fragments :: bell}"></span>
-</nav>
+<div th:replace="~{fragments/ui :: sellerHeader(${store})}"></div>
 
-<main class="container py-5">
+<main id="main" class="container ui-main">
     <div class="row justify-content-center">
         <div class="col-12 col-md-10 col-lg-8">
             <div class="card border-0 shadow-sm p-4">
@@ -63,7 +54,7 @@
                     <div class="row g-3 mb-3">
                         <div class="col-md-3">
                             <label for="groupPrice" class="form-label fw-semibold">공동구매 가격 (원) *</label>
-                            <input type="number" id="groupPrice" th:field="*{groupPrice}" class="form-control" min="0" step="10"
+                            <input type="number" id="groupPrice" th:field="*{groupPrice}" class="form-control" min="0" step="1"
                                    th:classappend="${#fields.hasErrors('groupPrice')} ? 'is-invalid' : ''">
                             <div class="invalid-feedback" th:if="${#fields.hasErrors('groupPrice')}" th:errors="*{groupPrice}"></div>
                         </div>
@@ -101,7 +92,7 @@
                     </div>
 
                     <div class="p-3 bg-white border rounded mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="ui-period-heading d-flex justify-content-between align-items-center mb-3">
                             <h2 class="h6 fw-bold mb-0">모집 기간 설정</h2>
                             <span id="recruitmentSummaryBadge" class="badge bg-success-subtle text-success border border-success-subtle">
                                 시작일로부터 3일 동안 모집
@@ -139,7 +130,7 @@
                     </div>
 
                     <div class="p-3 bg-white border rounded mb-3">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="ui-period-heading d-flex justify-content-between align-items-center mb-3">
                             <h2 class="h6 fw-bold mb-0">매장 수령 조건 및 기간 설정</h2>
                             <span id="pickupSummaryBadge" class="badge bg-primary-subtle text-primary border border-primary-subtle">
                                 수령 시작일로부터 1일 동안 수령 가능
@@ -195,7 +186,7 @@
     </div>
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+<script th:src="@{/js/vendor/bootstrap.bundle.min.js}"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         function formatDateTimeLocal(date) {
@@ -276,5 +267,6 @@
         bindPeriodCalculator('pickupStartAt', 'pickupEndAt', 'pickupDays', 'pickupSummaryBadge', '수령 시작일로부터', '.quick-pickup-days');
     });
 </script>
+<div th:replace="~{fragments/ui :: footer}"></div>
 </body>
 </html>

@@ -1,39 +1,34 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko" xmlns:th="http://www.thymeleaf.org"
       xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title th:text="'수량 예약 - ' + ${summary.title} + ' - 시흥한바구니'">수량 예약 - 시흥한바구니</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"
-          integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 </head>
-<body class="bg-light">
+<body class="ui-app ui-order ui-order-new">
 
-<nav class="navbar bg-white border-bottom">
-    <div class="container d-flex flex-wrap gap-3">
-        <a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a>
-        <div class="d-flex align-items-center gap-3">
-            <a th:href="@{/group-purchases}" class="text-decoration-none text-secondary">공동구매 둘러보기</a>
-            <a th:href="@{/orders}" class="text-decoration-none text-secondary">내 주문·예약</a>
-            <a th:href="@{/}" class="text-decoration-none text-secondary">홈으로</a>
-        </div>
-    </div>
-    <span th:replace="~{notifications/fragments :: bell}"></span>
-</nav>
+<div th:replace="~{fragments/ui :: buyerHeader}"></div>
 
-<main class="container py-4 py-md-5">
+<main id="main" class="container ui-main">
+    <nav class="ui-breadcrumb" aria-label="현재 위치"><a th:href="@{/group-purchases}">공동구매 둘러보기</a><span>/</span><span>수량 예약</span></nav>
+    <ol class="ui-steps" aria-label="예약 진행 단계"><li><span>01</span> 상품 확인</li><li aria-current="step"><span>02</span> 수량 예약</li><li><span>03</span> 예약 내역 확인</li></ol>
     <!-- 헤더 -->
     <div class="mb-4">
         <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 mb-2">주문 · 수량 예약</span>
         <h1 class="h3 fw-bold mb-1">공동구매 수량 예약 신청</h1>
-        <p class="text-secondary small mb-0">원하는 수량을 예약하면 <strong th:text="${holdMinutes} + '분 동안'">15분 동안</strong> 재고가 안전하게 선점됩니다.</p>
+        <p class="text-secondary small mb-0">원하는 수량을 최대 <strong th:text="${holdMinutes} + '분 동안'">15분 동안</strong> 확보할 수 있어요. 모집 마감이 가까우면 예약 기한이 짧아질 수 있습니다.</p>
     </div>
 
     <div class="row g-4">
         <!-- 좌측: 공동구매 및 매장 정보 요약 카드 -->
         <div class="col-12 col-lg-7">
-            <div class="card border-0 shadow-sm h-100">
+            <div class="card ui-reserve-summary border-0 shadow-sm h-100">
+                <div class="ui-reserve-photo">
+                    <img data-product-image th:if="${summary.productImageUrl != null and !#strings.isEmpty(summary.productImageUrl)}" th:src="@{${summary.productImageUrl}}" th:alt="${summary.productName}">
+                    <div class="ui-media-placeholder" th:unless="${summary.productImageUrl != null and !#strings.isEmpty(summary.productImageUrl)}">등록된 상품 사진 없음</div>
+                </div>
                 <div class="card-body p-4 p-md-5">
                     <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
                         <span class="badge bg-light text-dark border px-2 py-1" th:text="${summary.storeName}">매장명</span>
@@ -120,7 +115,7 @@
 
         <!-- 우측: 수량 선택 및 예약 제출 폼 -->
         <div class="col-12 col-lg-5">
-            <div class="card border-0 shadow-sm">
+            <div class="card ui-reserve-form border-0 shadow-sm">
                 <div class="card-body p-4">
                     <h2 class="h5 fw-bold mb-3">예약 수량 선택</h2>
 
@@ -157,16 +152,16 @@
                                 주문 수량
                             </label>
                             <div class="input-group">
-                                <button type="button" class="btn btn-outline-secondary" id="minusBtn"
+                                <button type="button" class="btn btn-outline-secondary" id="minusBtn" aria-label="예약 수량 줄이기"
                                         th:disabled="${!summary.orderable}">-</button>
                                 <input type="number"
                                        id="quantityInput"
                                        th:field="*{quantity}"
                                        class="form-control text-center fw-bold fs-5"
-                                       min="1"
+                                       min="1" step="1" th:max="${summary.userOrderableMaxQuantity}"
                                        th:disabled="${!summary.orderable}"
                                        required>
-                                <button type="button" class="btn btn-outline-secondary" id="plusBtn"
+                                <button type="button" class="btn btn-outline-secondary" id="plusBtn" aria-label="예약 수량 늘리기"
                                         th:disabled="${!summary.orderable}">+</button>
                             </div>
                             <div class="text-danger small mt-1"
@@ -195,8 +190,8 @@
                         </div>
 
                         <ul class="small text-muted ps-3 mb-4">
-                            <li>예약 신청 즉시 선택한 수량이 선점되며, <strong th:text="${holdMinutes} + '분 이내'">15분 이내</strong>에 결제를 완료해야 확정됩니다.</li>
-                            <li>예약 대기(PENDING) 상태에서는 언제든지 수수료 없이 수량 예약을 취소할 수 있습니다.</li>
+                            <li>예약은 최대 <strong th:text="${holdMinutes} + '분'">15분</strong> 유지됩니다. 정확한 마감 시각은 예약 내역에서 확인해 주세요.</li>
+                            <li>결제 대기 중에는 수량 예약을 취소할 수 있습니다. 예약 후 주문 상세에서 결제를 진행해 주세요.</li>
                         </ul>
 
                         <div class="d-grid gap-2">
@@ -205,7 +200,7 @@
                                     th:disabled="${!summary.orderable}">
                                 수량 예약하기
                             </button>
-                            <a th:href="@{/}" class="btn btn-outline-secondary">취소하고 돌아가기</a>
+                            <a th:href="@{/group-purchases/{id}(id=${summary.groupPurchaseId})}" class="btn btn-outline-secondary">상품 상세로 돌아가기</a>
                         </div>
                     </form>
                 </div>
@@ -301,8 +296,7 @@
     })();
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
-        integrity="sha384-FKyoEForCGlyvwx9Hj09JcYnnbp8sPUbStPfPzUe4bcfzptbERvPsmvsmP5tFw4G"
-        crossorigin="anonymous"></script>
+<script th:src="@{/js/vendor/bootstrap.bundle.min.js}"></script>
+<div th:replace="~{fragments/ui :: footer}"></div>
 </body>
 </html>

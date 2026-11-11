@@ -105,7 +105,10 @@
         event.stopPropagation();
         setDropdownOpen(!dropdown?.classList.contains('is-open'));
     });
-    backdrop?.addEventListener('click', () => setDropdownOpen(false));
+    backdrop?.addEventListener('click', () => {
+        setDropdownOpen(false);
+        bellButton?.focus();
+    });
     closeButton?.addEventListener('click', () => {
         setDropdownOpen(false);
         bellButton?.focus();
