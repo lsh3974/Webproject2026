@@ -1,156 +1,206 @@
 <!DOCTYPE html>
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>상품 관리 · 시흥한바구니</title>
-<th:block th:replace="~{fragments/ui :: assets}">
-</th:block>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>상품 관리 · 시흥한바구니</title>
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 </head>
-<body class="ui-app ui-seller">
-<div th:replace="~{fragments/ui :: sellerHeader(${store})}">
-</div>
-<main id="main" class="container ui-main">
-<div th:if="${successMessage}" class="alert alert-success" role="status" th:text="${successMessage}">
-</div>
-<section class="ui-seller-banner">
-<div>
-<span class="ui-kicker">MY STORE / PRODUCT MANAGEMENT</span>
-<h1 th:text="${store.name}">내 매장</h1>
-<p>
-<span th:text="${store.address}">매장 주소</span> · <span th:text="${store.phone}">전화번호</span>
-</p>
-</div>
-<a class="btn btn-success" th:href="@{/seller/stores/{id}/products/new(id=${store.id})}">+ 새 상품 등록</a>
-</section>
-<nav class="ui-seller-tabs" aria-label="매장 관리">
-<a aria-current="page" th:href="@{/seller/stores/{id}/products(id=${store.id})}">상품 관리</a>
-<a th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}">공동구매 관리</a>
-<a th:href="@{/seller/stores/{id}/pickups(id=${store.id})}">매장 수령</a>
-<a th:href="@{/seller/stores/{id}/edit(id=${store.id})}">매장 정보</a>
-</nav>
-<div class="ui-results-head">
-<h2>등록된 상품 <small th:text="${#lists.size(products)} + '개'">0개</small>
-</h2>
-<small>판매 상태와 모집 현황을 한눈에 확인하세요.</small>
-</div>
-<div class="ui-empty" th:if="${#lists.isEmpty(products)}">
-<h2>첫 상품을 등록해 보세요.</h2>
-<p class="ui-muted">상품을 등록하면 공동구매 모집을 시작할 수 있어요.</p>
-<a class="btn btn-success" th:href="@{/seller/stores/{id}/products/new(id=${store.id})}">상품 등록하기</a>
-</div>
-<div class="ui-management" th:unless="${#lists.isEmpty(products)}">
-<div class="ui-table-wrap">
-<table class="ui-table">
-<caption class="sr-only">등록 상품 및 판매 상태 관리</caption>
-<thead>
-<tr>
-<th scope="col">상품 정보</th>
-<th scope="col">판매가</th>
-<th scope="col">판매 상태</th>
-<th scope="col">공동구매</th>
-<th scope="col">관리</th>
-</tr>
-</thead>
-<tbody>
-<tr th:each="product : ${products}">
-<td data-label="상품 정보">
-<div class="ui-table-product">
-<div class="ui-table-image">
-<img data-product-image th:if="${product.imageUrl != null and !#strings.isEmpty(product.imageUrl)}" th:src="@{${product.imageUrl}}" th:alt="${product.name}">
-<div data-image-fallback class="ui-media-placeholder" th:if="${product.imageUrl == null or #strings.isEmpty(product.imageUrl)}">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-<path d="m5 9 4-6m10 6-4-6M3 9h18l-2 11H5L3 9Z"/>
-<path d="M9 12v5m6-5v5"/>
-</svg>
-</div>
-</div>
-<div>
-<strong th:text="${product.name}">상품명</strong>
-<small th:text="${product.category}">분류</small>
-</div>
-</div>
-</td>
-<td data-label="판매가">
-<strong th:text="${#numbers.formatInteger(product.regularPrice,1,'COMMA')} + '원'">가격</strong>
-<br>
-<small class="ui-muted" th:text="'/ ' + ${product.unit}">단위</small>
-</td>
-<td data-label="판매 상태">
-<span th:if="${product.status.name() == 'ON_SALE'}" class="ui-pill">판매 중</span>
-<span th:if="${product.status.name() == 'SOLD_OUT'}" class="badge bg-secondary">품절</span>
-<span th:if="${product.status.name() == 'HIDDEN'}" class="badge bg-dark">숨김</span>
-<form th:action="@{/seller/stores/{storeId}/products/{productId}/status(storeId=${store.id}, productId=${product.id})}"
-                                  method="post" class="ui-status-form">
-<button type="submit" name="status" value="ON_SALE"
+<body class="ui-app ui-seller bg-light">
+
+<div th:replace="~{fragments/ui :: sellerHeader(${store})}"></div>
+
+<main id="main" class="container ui-main py-4">
+
+    <!-- 알림 메시지 -->
+    <div th:if="${successMessage}" class="alert alert-success alert-dismissible fade show rounded-3" role="alert">
+        <span th:text="${successMessage}"></span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
+    <!-- 매장 정보 배너 -->
+    <div class="card border-0 shadow-sm rounded-4 p-4 mb-4 bg-white">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle px-2 py-1 mb-1">MY STORE / PRODUCT</span>
+                <h1 class="h3 fw-bold mb-1" th:text="${store.name}">내 매장</h1>
+                <p class="text-secondary small mb-0">
+                    <span th:text="${store.address}">매장 주소</span> · 
+                    <span th:text="${store.phone}">전화번호</span>
+                </p>
+            </div>
+            <a class="btn btn-success fw-semibold px-3 py-2" th:href="@{/seller/stores/{id}/products/new(id=${store.id})}">
+                + 새 상품 등록
+            </a>
+        </div>
+    </div>
+
+    <!-- 매장 관리 탭 네비게이션 -->
+    <ul class="nav nav-pills mb-4 gap-2 bg-white p-2 rounded-3 shadow-sm">
+        <li class="nav-item">
+            <a class="nav-link active bg-success text-white fw-semibold" th:href="@{/seller/stores/{id}/products(id=${store.id})}">상품 관리</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link text-secondary" th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}">공동구매 관리</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link text-secondary" th:href="@{/seller/stores/{id}/pickups(id=${store.id})}">📷 QR/수령 관리</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link text-secondary" th:href="@{/seller/stores/{id}/edit(id=${store.id})}">매장 정보 수정</a>
+        </li>
+    </ul>
+
+    <!-- 등록 상품 헤더 -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h5 fw-bold mb-0">
+            등록된 상품 <span class="badge bg-light text-dark border" th:text="${#lists.size(products)} + '개'">0개</span>
+        </h2>
+        <span class="text-secondary small">판매 상태와 연동된 공동구매를 한눈에 관리하세요.</span>
+    </div>
+
+    <!-- 상품 없음 -->
+    <div class="card border-0 shadow-sm rounded-4 text-center p-5 bg-white" th:if="${#lists.isEmpty(products)}">
+        <div class="fs-1 mb-3">📦</div>
+        <p class="text-secondary fs-5 mb-2">첫 상품을 등록해 보세요.</p>
+        <p class="text-muted small mb-4">상품을 등록하면 동네 이웃들과 함께하는 공동구매 모집을 시작할 수 있어요.</p>
+        <div>
+            <a class="btn btn-success px-4 py-2 fw-semibold" th:href="@{/seller/stores/{id}/products/new(id=${store.id})}">
+                상품 등록하기
+            </a>
+        </div>
+    </div>
+
+    <!-- 상품 테이블 래퍼 -->
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white mb-4" th:unless="${#lists.isEmpty(products)}">
+        <div class="table-responsive">
+            <table class="table align-middle table-hover mb-0">
+                <thead class="table-light small">
+                    <tr>
+                        <th scope="col" style="min-width: 200px;">상품 정보</th>
+                        <th scope="col" style="min-width: 100px;">정상 판매가</th>
+                        <th scope="col" style="min-width: 180px;">판매 상태 변경</th>
+                        <th scope="col" style="min-width: 220px;">공동구매 모집</th>
+                        <th scope="col" class="text-end" style="min-width: 120px;">관리</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="product : ${products}">
+                        <!-- 상품 정보 -->
+                        <td>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="rounded-3 overflow-hidden bg-light flex-shrink-0" style="width: 54px; height: 54px;">
+                                    <img th:if="${product.imageUrl != null and !#strings.isEmpty(product.imageUrl)}"
+                                         th:src="@{${product.imageUrl}}" th:alt="${product.name}"
+                                         class="w-100 h-100 object-fit-cover">
+                                    <div th:if="${product.imageUrl == null or #strings.isEmpty(product.imageUrl)}"
+                                         class="w-100 h-100 d-flex align-items-center justify-content-center text-secondary bg-success-subtle">
+                                        🛒
+                                    </div>
+                                </div>
+                                <div>
+                                    <strong class="d-block text-dark" th:text="${product.name}">상품명</strong>
+                                    <span class="badge bg-light text-secondary border small fw-normal" th:text="${product.category}">분류</span>
+                                </div>
+                            </div>
+                        </td>
+
+                        <!-- 판매가 -->
+                        <td>
+                            <strong class="text-dark" th:text="${#numbers.formatInteger(product.regularPrice, 1, 'COMMA')} + '원'">가격</strong>
+                            <small class="text-secondary d-block" th:text="'/ ' + ${product.unit}">단위</small>
+                        </td>
+
+                        <!-- 판매 상태 변경 폼 -->
+                        <td>
+                            <div class="mb-1">
+                                <span th:if="${product.status.name() == 'ON_SALE'}" class="badge bg-success">판매 중</span>
+                                <span th:if="${product.status.name() == 'SOLD_OUT'}" class="badge bg-secondary">품절</span>
+                                <span th:if="${product.status.name() == 'HIDDEN'}" class="badge bg-dark">숨김</span>
+                            </div>
+                            <form th:action="@{/seller/stores/{storeId}/products/{productId}/status(storeId=${store.id}, productId=${product.id})}"
+                                  method="post" class="d-flex gap-1">
+                                <button type="submit" name="status" value="ON_SALE"
                                         class="btn btn-sm flex-fill"
                                         th:classappend="${product.status.name() == 'ON_SALE'} ? 'btn-primary disabled' : 'btn-outline-primary'">
                                     판매중
                                 </button>
-<button type="submit" name="status" value="SOLD_OUT"
+                                <button type="submit" name="status" value="SOLD_OUT"
                                         class="btn btn-sm flex-fill"
                                         th:classappend="${product.status.name() == 'SOLD_OUT'} ? 'btn-secondary disabled' : 'btn-outline-secondary'">
                                     품절
                                 </button>
-<button type="submit" name="status" value="HIDDEN"
+                                <button type="submit" name="status" value="HIDDEN"
                                         class="btn btn-sm flex-fill"
                                         th:classappend="${product.status.name() == 'HIDDEN'} ? 'btn-dark disabled' : 'btn-outline-dark'">
                                     숨김
                                 </button>
-</form>
-</td>
-<td data-label="공동구매">
-<th:block th:with="gp=${groupPurchaseMap != null ? groupPurchaseMap.get(product.id) : null}">
-<!-- 1. 등록된 공동구매가 없는 경우: 등록 버튼 -->
-<a th:if="${gp == null}"
+                            </form>
+                        </td>
+
+                        <!-- 공동구매 모집 링크 -->
+                        <td>
+                            <th:block th:with="gp=${groupPurchaseMap != null ? groupPurchaseMap.get(product.id) : null}">
+                                <!-- 1. 등록된 공동구매가 없는 경우: 등록 버튼 -->
+                                <a th:if="${gp == null}"
                                    th:href="@{/seller/stores/{storeId}/group-purchases/new(storeId=${store.id}, productId=${product.id})}"
                                    class="btn btn-outline-success btn-sm w-100 fw-semibold">
-                                    + 이 상품으로 공동구매 모집하기
+                                    + 이 상품으로 공동구매 모집
                                 </a>
-<!-- 2. 공동구매 모집 초안인 경우: 주황/노랑 버튼 -->
-<a th:if="${gp != null and gp.status.name() == 'DRAFT'}"
+
+                                <!-- 2. 공동구매 모집 초안인 경우: 주황/노랑 버튼 -->
+                                <a th:if="${gp != null and gp.status.name() == 'DRAFT'}"
                                    th:href="@{/seller/stores/{storeId}/group-purchases/{id}/edit(storeId=${store.id}, id=${gp.id})}"
                                    class="btn btn-warning btn-sm w-100 fw-semibold text-dark d-flex align-items-center justify-content-center gap-1">
-<span class="badge bg-dark">초안</span>
-<span>공동구매 모집 초안</span>
-</a>
-<!-- 3. 공동구매 모집중인 경우: 진한 초록 버튼 -->
-<a th:if="${gp != null and gp.status.name() == 'OPEN'}"
+                                    <span class="badge bg-dark">초안</span>
+                                    <span>공동구매 모집 초안</span>
+                                </a>
+
+                                <!-- 3. 공동구매 모집중인 경우: 진한 초록 버튼 -->
+                                <a th:if="${gp != null and gp.status.name() == 'OPEN'}"
                                    th:href="@{/seller/stores/{storeId}/group-purchases/{id}/edit(storeId=${store.id}, id=${gp.id})}"
                                    class="btn btn-success btn-sm w-100 fw-semibold d-flex align-items-center justify-content-center gap-1">
-<span class="badge bg-light text-success">진행중</span>
-<span>공동구매 모집중</span>
-</a>
-<!-- 4. 공동구매 마감인 경우 (CLOSED, SUCCESS, FAILED): 회색 마감 버튼 + 새 모집 버튼 -->
-<div th:if="${gp != null and (gp.status.name() == 'CLOSED' or gp.status.name() == 'SUCCESS' or gp.status.name() == 'FAILED')}"
+                                    <span class="badge bg-light text-success">진행중</span>
+                                    <span>공동구매 모집중</span>
+                                </a>
+
+                                <!-- 4. 공동구매 마감인 경우 (CLOSED, SUCCESS, FAILED): 회색 마감 버튼 + 새 모집 버튼 -->
+                                <div th:if="${gp != null and (gp.status.name() == 'CLOSED' or gp.status.name() == 'SUCCESS' or gp.status.name() == 'FAILED')}"
                                      class="d-flex gap-1">
-<a th:href="@{/seller/stores/{storeId}/group-purchases/{id}/edit(storeId=${store.id}, id=${gp.id})}"
+                                    <a th:href="@{/seller/stores/{storeId}/group-purchases/{id}/edit(storeId=${store.id}, id=${gp.id})}"
                                        class="btn btn-secondary btn-sm flex-fill fw-semibold">
                                         공동구매 마감
                                     </a>
-<a th:href="@{/seller/stores/{storeId}/group-purchases/new(storeId=${store.id}, productId=${product.id})}"
+                                    <a th:href="@{/seller/stores/{storeId}/group-purchases/new(storeId=${store.id}, productId=${product.id})}"
                                        class="btn btn-outline-success btn-sm"
                                        title="이 상품으로 새 공동구매 모집 등록">
                                         + 새 모집
                                     </a>
-</div>
-</th:block>
-</td>
-<td data-label="관리">
-<div class="ui-table-actions">
-<a class="btn btn-outline-secondary btn-sm" th:href="@{/seller/stores/{storeId}/products/{productId}/edit(storeId=${store.id},productId=${product.id})}">수정</a>
-<form th:action="@{/seller/stores/{storeId}/products/{productId}/delete(storeId=${store.id},productId=${product.id})}" method="post" onsubmit="return confirm('정말 이 상품을 삭제하시겠습니까?');">
-<button class="btn btn-outline-danger btn-sm" type="submit">삭제</button>
-</form>
-</div>
-</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
+                                </div>
+                            </th:block>
+                        </td>
+
+                        <!-- 관리 (수정/삭제) -->
+                        <td class="text-end">
+                            <div class="d-inline-flex gap-1">
+                                <a class="btn btn-outline-secondary btn-sm" th:href="@{/seller/stores/{storeId}/products/{productId}/edit(storeId=${store.id},productId=${product.id})}">
+                                    수정
+                                </a>
+                                <form th:action="@{/seller/stores/{storeId}/products/{productId}/delete(storeId=${store.id},productId=${product.id})}"
+                                      method="post" onsubmit="return confirm('정말 이 상품을 삭제하시겠습니까?');" class="m-0">
+                                    <button class="btn btn-outline-danger btn-sm" type="submit">삭제</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
 </main>
-<div th:replace="~{fragments/ui :: footer}">
-</div>
+
+<div th:replace="~{fragments/ui :: footer}"></div>
+
 </body>
 </html>
