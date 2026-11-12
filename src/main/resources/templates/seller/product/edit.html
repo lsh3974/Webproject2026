@@ -6,16 +6,23 @@
     <title>상품 정보 수정 - 시흥한바구니</title>
     <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 </head>
-<body class="ui-app ui-seller">
+<body class="ui-app ui-seller bg-light">
 
 <div th:replace="~{fragments/ui :: sellerHeader(${store})}"></div>
 
-<main id="main" class="container ui-main">
+<main id="main" class="container ui-main py-4">
     <div class="row justify-content-center">
-        <div class="col-12 col-md-8 col-lg-6">
-            <div class="card border-0 shadow-sm p-4">
-                <span class="text-muted small" th:text="${store.name} + ' 소속 상품'">매장명 소속 상품</span>
-                <h1 class="h4 fw-bold mb-3 mt-1">상품 정보 수정</h1>
+        <div class="col-12 col-md-8 col-lg-7">
+            <div class="card border-0 shadow-sm rounded-4 p-4 p-md-5 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle px-3 py-1"
+                          th:text="${store.name} + ' 소속 상품'">매장명 소속 상품</span>
+                    <a th:href="@{/seller/stores/{id}/products(id=${store.id})}" class="text-secondary small text-decoration-none">
+                        &larr; 상품 목록으로
+                    </a>
+                </div>
+
+                <h1 class="h4 fw-bold mb-1">상품 정보 수정</h1>
                 <p class="text-secondary small mb-4">상품의 정보와 판매 상태를 수정할 수 있습니다.</p>
 
                 <form th:action="@{/seller/stores/{storeId}/products/{productId}/edit(storeId=${store.id}, productId=${product.id})}"
@@ -27,7 +34,7 @@
                         <div class="invalid-feedback" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></div>
                     </div>
 
-                    <div class="row g-2 mb-3">
+                    <div class="row g-3 mb-3">
                         <div class="col-6">
                             <label for="category" class="form-label fw-semibold">카테고리 *</label>
                             <input type="text" id="category" th:field="*{category}" class="form-control"
@@ -54,7 +61,7 @@
 
                     <div class="mb-3">
                         <label for="regularPrice" class="form-label fw-semibold">정상 판매가 (원) *</label>
-                        <input type="number" id="regularPrice" th:field="*{regularPrice}" class="form-control" min="0" step="1"
+                        <input type="number" id="regularPrice" th:field="*{regularPrice}" class="form-control" min="0" step="10"
                                th:classappend="${#fields.hasErrors('regularPrice')} ? 'is-invalid' : ''">
                         <div class="invalid-feedback" th:if="${#fields.hasErrors('regularPrice')}" th:errors="*{regularPrice}"></div>
                     </div>
@@ -69,20 +76,20 @@
                     </div>
 
                     <!-- 이미지 업로드 옵션 (내 컴퓨터 파일 선택 or 웹 URL) -->
-                    <div class="mb-3 p-3 bg-white border rounded">
+                    <div class="mb-3 p-3 bg-light rounded-3 border">
                         <label class="form-label fw-semibold mb-2">상품 이미지 변경</label>
 
                         <div class="mb-2">
                             <label for="imageFile" class="form-label small text-secondary">1) 내 컴퓨터 폴더에서 파일 찾기</label>
-                            <input type="file" id="imageFile" th:field="*{imageFile}" class="form-control"
+                            <input type="file" id="imageFile" th:field="*{imageFile}" class="form-control bg-white"
                                    accept="image/png, image/jpeg, image/jpg, image/gif, image/webp">
                         </div>
 
-                        <div class="text-center my-2 text-muted small">또는</div>
+                        <div class="text-center my-2 text-muted small fw-semibold">또는</div>
 
                         <div>
                             <label for="imageUrl" class="form-label small text-secondary">2) 웹 이미지 주소(URL) 직접 입력</label>
-                            <input type="text" inputmode="url" id="imageUrl" th:field="*{imageUrl}" class="form-control"
+                            <input type="text" inputmode="url" id="imageUrl" th:field="*{imageUrl}" class="form-control bg-white"
                                    th:classappend="${#fields.hasErrors('imageUrl')} ? 'is-invalid' : ''">
                             <div class="invalid-feedback" th:if="${#fields.hasErrors('imageUrl')}" th:errors="*{imageUrl}"></div>
                         </div>
@@ -94,8 +101,8 @@
                     </div>
 
                     <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary flex-fill">수정 완료</button>
-                        <a th:href="@{/seller/stores/{id}/products(id=${store.id})}" class="btn btn-outline-secondary">취소</a>
+                        <button type="submit" class="btn btn-primary flex-fill py-2 fw-semibold">수정 완료</button>
+                        <a th:href="@{/seller/stores/{id}/products(id=${store.id})}" class="btn btn-outline-secondary px-4">취소</a>
                     </div>
                 </form>
             </div>
@@ -103,7 +110,6 @@
     </div>
 </main>
 
-<script th:src="@{/js/vendor/bootstrap.bundle.min.js}"></script>
 <div th:replace="~{fragments/ui :: footer}"></div>
 </body>
 </html>

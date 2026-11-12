@@ -4,94 +4,116 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>회원가입 | 시흥한바구니</title>
-
     <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 </head>
-<body class="ui-app ui-auth">
-<div th:replace="~{fragments/ui :: buyerHeader}"></div>
+<body class="ui-app bg-light d-flex flex-column min-vh-100">
 
-<main id="main" class="container ui-main">
+<header class="ui-header">
+    <div class="container ui-header-inner justify-content-between">
+        <a class="ui-brand" th:href="@{/}">
+            <span class="ui-brand-symbol">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                    <path d="m5 9 4-6m10 6-4-6M3 9h18l-2 11H5L3 9Z"/>
+                    <path d="M9 12v5m6-5v5"/>
+                </svg>
+            </span>
+            <span>
+                <strong>시흥한바구니</strong>
+                <small>OUR NEIGHBORHOOD MARKET</small>
+            </span>
+        </a>
+        <a th:href="@{/login}" class="text-secondary small text-decoration-none">이미 계정이 있으신가요? 로그인</a>
+    </div>
+</header>
+
+<main id="main" class="container ui-main py-5 my-auto">
     <div class="row justify-content-center">
-        <div class="col-12 col-md-8 col-lg-5">
-            <a th:href="@{/}" class="text-success text-decoration-none">
-                ← 시흥한바구니 홈
-            </a>
+        <div class="col-12 col-md-7 col-lg-5 col-xl-4">
+            <div class="card border-0 shadow-sm rounded-4 bg-white p-4 p-md-5">
+                <div class="text-center mb-4">
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 mb-2">JOIN US</span>
+                    <h1 class="h3 fw-bold mb-1">회원가입</h1>
+                    <p class="text-secondary small mb-0">우리 동네 신선한 장보기를 함께 시작해보세요.</p>
+                </div>
 
-            <div class="card border-0 shadow-sm mt-3">
-                <div class="card-body p-4">
-                    <h1 class="h3 mb-4">회원가입</h1>
+                <div th:if="${param.success != null}"
+                     class="alert alert-success rounded-3 small" role="status">
+                    회원가입이 완료되었습니다. 이제 로그인해주세요!
+                </div>
 
-                    <div th:if="${param.success != null}"
-                         class="alert alert-success" role="status">
-                        회원가입이 완료되었습니다.
+                <form th:action="@{/signup}"
+                      th:object="${signupForm}"
+                      method="post">
+
+                    <div th:if="${#fields.hasGlobalErrors()}"
+                         class="alert alert-danger rounded-3 small" role="alert">
+                        <p th:each="error : ${#fields.globalErrors()}"
+                           th:text="${error}"
+                           class="mb-0"></p>
                     </div>
 
-                    <form th:action="@{/signup}"
-                          th:object="${signupForm}"
-                          method="post">
+                    <div class="mb-3">
+                        <label for="email" class="form-label fw-semibold">
+                            이메일 주소 *
+                        </label>
+                        <input type="email"
+                               th:field="*{email}"
+                               class="form-control"
+                               autocomplete="email"
+                               maxlength="255"
+                               placeholder="example@email.com"
+                               required>
+                        <p th:errors="*{email}"
+                           class="text-danger small mt-1"></p>
+                    </div>
 
-                        <div th:if="${#fields.hasGlobalErrors()}"
-                             class="alert alert-danger" role="alert">
-                            <p th:each="error : ${#fields.globalErrors()}"
-                               th:text="${error}"
-                               class="mb-0"></p>
+                    <div class="mb-3">
+                        <label for="password" class="form-label fw-semibold">
+                            비밀번호 *
+                        </label>
+                        <input type="password"
+                               id="password"
+                               name="password"
+                               class="form-control"
+                               autocomplete="new-password"
+                               minlength="8"
+                               maxlength="72"
+                               aria-describedby="passwordHelp"
+                               placeholder="8자 이상 영문/숫자/특수문자"
+                               required>
+                        <div id="passwordHelp" class="form-text small">
+                            8자 이상 입력해주세요.
                         </div>
+                        <p th:errors="*{password}"
+                           class="text-danger small mt-1"></p>
+                        <p th:errors="*{passwordWithinByteLimit}"
+                           class="text-danger small mt-1"></p>
+                    </div>
 
-                        <div class="mb-3">
-                            <label for="email" class="form-label">
-                                이메일
-                            </label>
-                            <input type="email"
-                                   th:field="*{email}"
-                                   class="form-control"
-                                   autocomplete="email"
-                                   maxlength="255"
-                                   required>
-                            <p th:errors="*{email}"
-                               class="text-danger small mt-1"></p>
-                        </div>
+                    <div class="mb-4">
+                        <label for="displayName" class="form-label fw-semibold">
+                            닉네임 (이름) *
+                        </label>
+                        <input type="text"
+                               th:field="*{displayName}"
+                               class="form-control"
+                               autocomplete="nickname"
+                               maxlength="60"
+                               placeholder="예: 시흥장보기마스터"
+                               required>
+                        <p th:errors="*{displayName}"
+                           class="text-danger small mt-1"></p>
+                    </div>
 
-                        <div class="mb-3">
-                            <label for="password" class="form-label">
-                                비밀번호
-                            </label>
-                            <input type="password"
-                                   id="password"
-                                   name="password"
-                                   class="form-control"
-                                   autocomplete="new-password"
-                                   minlength="8"
-                                   maxlength="72"
-                                   aria-describedby="passwordHelp"
-                                   required>
-                            <div id="passwordHelp" class="form-text">
-                                8자 이상 입력해주세요.
-                            </div>
-                            <p th:errors="*{password}"
-                               class="text-danger small mt-1"></p>
-                            <p th:errors="*{passwordWithinByteLimit}"
-                               class="text-danger small mt-1"></p>
-                        </div>
+                    <button type="submit"
+                            class="btn btn-success w-100 fw-semibold py-2">
+                        가입 완료하기
+                    </button>
+                </form>
 
-                        <div class="mb-4">
-                            <label for="displayName" class="form-label">
-                                닉네임을 입력해주세요
-                            </label>
-                            <input type="text"
-                                   th:field="*{displayName}"
-                                   class="form-control"
-                                   autocomplete="nickname"
-                                   maxlength="60"
-                                   required>
-                            <p th:errors="*{displayName}"
-                               class="text-danger small mt-1"></p>
-                        </div>
-
-                        <button type="submit"
-                                class="btn btn-success w-100">
-                            가입하기
-                        </button>
-                    </form>
+                <div class="text-center mt-4 pt-3 border-top small text-secondary">
+                    이미 가입된 계정이 있으신가요?
+                    <a th:href="@{/login}" class="text-success fw-semibold text-decoration-none ms-1">로그인하기</a>
                 </div>
             </div>
         </div>
@@ -99,5 +121,6 @@
 </main>
 
 <div th:replace="~{fragments/ui :: footer}"></div>
+
 </body>
 </html>
