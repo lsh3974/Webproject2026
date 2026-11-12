@@ -206,9 +206,16 @@
     document.querySelectorAll('form[action$="/logout"]').forEach((form) => {
         let logoutInProgress = false;
         form.addEventListener('submit', async (event) => {
-            if (logoutInProgress) return;
+            // 중복 제출 여부와 관계없이 브라우저의 기본 즉시 제출을 먼저 차단한다.
+            // 구독 조회 중 두 번째 submit이 들어와도 endpoint 없는 POST가 발생하지 않는다.
             event.preventDefault();
+            if (logoutInProgress) return;
+
             logoutInProgress = true;
+            form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach((button) => {
+                button.disabled = true;
+            });
+            form.setAttribute('aria-busy', 'true');
             document.body.classList.remove('notification-popover-open');
 
             try {
