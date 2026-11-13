@@ -84,4 +84,51 @@ class NotificationDeliveryTransactionsTest {
 
         assertThat(transactions.isPushSubscriptionOwnedByRecipient(52L)).isFalse();
     }
+
+    @Test
+    void 만료된_푸시응답은_알림_수신자와_현재_구독_소유자가_일치할_때만_비활성화한다() {
+        NotificationDeliveryTransactions transactions = new NotificationDeliveryTransactions(
+                deliveries, subscriptions, preferences);
+        NotificationDelivery delivery = mock(NotificationDelivery.class);
+        Notification notification = mock(Notification.class);
+        PushSubscription subscription = mock(PushSubscription.class);
+        User recipient = mock(User.class);
+
+        when(deliveries.findByIdForUpdate(60L)).thenReturn(Optional.of(delivery));
+        when(delivery.getPushSubscription()).thenReturn(subscription);
+        when(delivery.getNotification()).thenReturn(notification);
+        when(notification.getUser()).thenReturn(recipient);
+        when(recipient.getId()).thenReturn(10L);
+        when(subscription.getId()).thenReturn(70L);
+
+        transactions.markFailure(60L, new NotificationSendException(
+                "브라우저 푸시 구독이 만료되었습니다.",
+                NotificationSendException.Outcome.SUBSCRIPTION_GONE));
+
+        // Repository의 조건부 UPDATE가 id와 현재 소유자(userId)를 함께 검사한다.
+        verify(subscriptions).deactivateIfOwnedByUser(70L, 10L);
+        verify(delivery).removeSubscriptionTarget();
+    }
+
+    @Test
+    void 만료된_푸시응답에_구독이_없으면_구독_비활성화_쿼리를_호출하지_않는다() {
+        NotificationDeliveryTransactions transactions = new NotificationDeliveryTransactions(
+                deliveries, subscriptions, preferences);
+        NotificationDelivery delivery = mock(NotificationDelivery.class);
+        Notification notification = mock(Notification.class);
+        User recipient = mock(User.class);
+
+        when(deliveries.findByIdForUpdate(61L)).thenReturn(Optional.of(delivery));
+        when(delivery.getPushSubscription()).thenReturn(null);
+        when(delivery.getNotification()).thenReturn(notification);
+        when(notification.getUser()).thenReturn(recipient);
+        when(recipient.getId()).thenReturn(10L);
+
+        transactions.markFailure(61L, new NotificationSendException(
+                "브라우저 푸시 구독이 만료되었습니다.",
+                NotificationSendException.Outcome.SUBSCRIPTION_GONE));
+
+        verify(subscriptions, never()).deactivateIfOwnedByUser(anyLong(), anyLong());
+        verify(delivery).removeSubscriptionTarget();
+    }
 }
