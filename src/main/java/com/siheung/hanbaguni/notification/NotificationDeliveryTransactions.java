@@ -1,3 +1,4 @@
+
 package com.siheung.hanbaguni.notification;
 
 import com.siheung.hanbaguni.repository.NotificationDeliveryRepository;
@@ -90,15 +91,26 @@ public class NotificationDeliveryTransactions {
     public void markFailure(Long id, NotificationSendException exception) {
         NotificationDelivery d = deliveries.findByIdForUpdate(id).orElseThrow();
         String message = exception.getMessage();
+
         switch (exception.getOutcome()) {
             case UNKNOWN -> d.unknown(message);
+
             case SUBSCRIPTION_GONE -> {
+                // 발송 요청 당시의 구독이 계정 전환으로 다른 사용자에게 이전되었을 수 있다.
+                // 구독 ID만으로 비활성화하지 않고, 알림 수신자가 현재 소유자인 경우에만 처리한다.
+                PushSubscription subscription = d.getPushSubscription();
+                Long subscriptionId = subscription != null ? subscription.getId() : null;
+                Long recipientUserId = d.getNotification().getUser().getId();
+
                 d.removeSubscriptionTarget();
-                if (d.getPushSubscription() != null) {
-                    subscriptions.findById(d.getPushSubscription().getId()).ifPresent(PushSubscription::deactivate);
+
+                if (subscriptionId != null && recipientUserId != null) {
+                    subscriptions.deactivateIfOwnedByUser(subscriptionId, recipientUserId);
                 }
             }
+
             case PERMANENT -> d.fail(message);
+
             case RETRYABLE -> {
                 if (d.getAttemptCount() >= 5) d.fail(message);
                 else {
