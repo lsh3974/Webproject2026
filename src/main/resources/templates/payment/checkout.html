@@ -9,18 +9,16 @@
 
     <title>한바구니 결제</title>
 
-    <link
-            href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-            rel="stylesheet">
+    <th:block th:replace="~{fragments/ui :: assets}"></th:block>
 
     <script src="https://js.tosspayments.com/v2/standard"></script>
 </head>
-<body class="bg-light">
-<nav class="navbar bg-white border-bottom"><div class="container d-flex justify-content-between"><a class="navbar-brand fw-bold text-success" th:href="@{/}">시흥한바구니</a><span th:replace="~{notifications/fragments :: bell}"></span></div></nav>
+<body class="ui-app ui-order ui-payment">
+<div th:replace="~{fragments/ui :: buyerHeader}"></div>
+<main id="main" class="container ui-main">
 
-<main id="payment-page"
-      class="container py-5"
-      style="max-width: 680px"
+<section id="payment-page"
+      class="ui-payment-panel"
       th:attr="
         data-order-id=${order.id},
         data-status=${order.status.name()},
@@ -32,7 +30,8 @@
 
     <div class="card shadow-sm">
         <div class="card-body p-4">
-            <h1 class="h4 mb-4">공동구매 결제</h1>
+            <span class="ui-kicker">CHECK YOUR ORDER</span><h1 class="h4 mb-4">공동구매 결제</h1>
+<div class="ui-payment-product"><strong th:text="${order.groupPurchase.product.name}">상품명</strong><p><span th:text="${order.quantity}">1</span>개 · 판매 단위 <span th:text="${order.groupPurchase.product.unit}">1팩</span><br><span th:text="${order.groupPurchase.store.name}">수령 매장</span></p></div>
 
             <p>
                 주문번호:
@@ -83,7 +82,9 @@
             </div>
         </div>
     </div>
+</section>
 </main>
+<div th:replace="~{fragments/ui :: footer}"></div>
 
 <script th:src="@{/js/payment.js}"></script>
 </body>

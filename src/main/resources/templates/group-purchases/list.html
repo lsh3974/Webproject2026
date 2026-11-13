@@ -1,51 +1,101 @@
 <!DOCTYPE html>
 <html lang="ko" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>공동구매 목록 · 시흥한바구니</title>
-    <link rel="stylesheet" th:href="@{/css/group-purchases.css}">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>공동구매 목록 · 시흥한바구니</title>
+<th:block th:replace="~{fragments/ui :: assets}">
+</th:block>
 </head>
-<body>
-<a class="skip-link" href="#main">본문으로 건너뛰기</a>
-<div th:replace="~{group-purchases/fragments :: header}"></div>
-<main id="main" class="container page">
-    <h1>공동구매 목록</h1>
-    <p>현재 모집 중인 공동구매를 조회합니다.</p>
-    <form class="search-form" th:action="@{/group-purchases}" method="get" role="search" aria-label="공동구매 검색">
-        <div class="field"><label for="q">상품명·매장명·모집 제목</label><input id="q" name="q" type="search" maxlength="100" th:value="${q}"></div>
-        <div class="field"><label for="district">지역</label><input id="district" name="district" maxlength="100" th:value="${district}" placeholder="예: 정왕동"></div>
-        <div class="field"><label for="category">카테고리</label><input id="category" name="category" maxlength="100" th:value="${category}" placeholder="예: 채소"></div>
-        <div class="actions"><button class="primary" type="submit">검색</button><a th:href="@{/group-purchases}">초기화</a></div>
-    </form>
-
-    <p>검색 결과 <strong th:text="${purchases.totalElements}">0</strong>건 · 최신 등록순</p>
-    <div class="table-wrap" th:if="${!purchases.empty}">
-        <table>
-            <caption class="sr-only">모집 중인 공동구매 검색 결과</caption>
-            <thead><tr><th scope="col">공동구매 / 상품</th><th scope="col">매장</th><th scope="col">가격</th><th scope="col">현재 / 목표 수량</th><th scope="col">모집 마감</th><th scope="col">조회</th></tr></thead>
-            <tbody>
-            <tr th:each="item : ${purchases.content}">
-                <td><strong th:text="${item.title}">제목</strong><br><small><span th:text="${item.productName}">상품</span> · <span th:text="${item.category}">분류</span></small></td>
-                <td th:text="${item.storeName}">매장</td>
-                <td><span th:text="${#numbers.formatInteger(item.groupPrice, 1, 'COMMA')}">0</span>원 / <span th:text="${item.unit}">개</span></td>
-                <td><span th:text="${item.currentQuantity}">0</span> / <span th:text="${item.targetQuantity}">0</span> <span th:text="${item.unit}">개</span></td>
-                <td th:text="${#temporals.format(item.endAt, 'yyyy.MM.dd HH:mm')}">마감</td>
-                <td><a th:href="@{/group-purchases/{id}(id=${item.id})}" th:aria-label="${item.title + ' 상세 보기'}">상세 보기</a></td>
-            </tr>
-            </tbody>
-        </table>
-    </div>
-    <div class="notice" th:if="${purchases.empty}">
-        <p>조건에 맞는 공동구매가 없어요.</p>
-        <a th:href="@{/group-purchases}">전체 목록 보기</a>
-    </div>
-    <nav class="pagination" aria-label="목록 페이지" th:if="${purchases.totalPages > 1 or purchases.number > 0}">
-        <a th:if="${purchases.number > 0}" th:href="@{/group-purchases(q=${q},district=${district},category=${category},page=${purchases.number - 1})}">← 이전</a>
-        <span th:if="${purchases.totalPages > purchases.number}" th:text="|${purchases.number + 1} / ${purchases.totalPages}|">1 / 1</span>
-        <a th:if="${purchases.hasNext()}" th:href="@{/group-purchases(q=${q},district=${district},category=${category},page=${purchases.number + 1})}">다음 →</a>
-    </nav>
+<body class="ui-app ui-buyer">
+<div th:replace="~{fragments/ui :: buyerHeader}">
+</div>
+<main id="main" class="container ui-main">
+<section class="ui-hero">
+<span class="ui-kicker">GOOD FOOD, GOOD NEIGHBORS</span>
+<h1>우리 동네에서 함께,<br>필요한 만큼 알뜰하게.</h1>
+<p>가까운 매장의 좋은 상품을 함께 구매하고,<br>편한 시간에 직접 수령하세요.</p>
+<a class="btn btn-success" href="#catalog">모집 중인 상품 보기 ↗</a>
+<span class="ui-hero-mark">가까운 매장 · 함께하는 장보기</span>
+</section>
+<form class="ui-search" th:action="@{/group-purchases}" method="get" role="search" aria-label="공동구매 검색">
+<div>
+<label for="q">어떤 상품을 찾으세요?</label>
+<input class="form-control" type="search" id="q" name="q" maxlength="100" th:value="${q}" placeholder="상품명, 매장명, 공동구매 제목">
+</div>
+<div>
+<label for="district">지역</label>
+<input class="form-control" id="district" name="district" th:value="${district}" maxlength="100" placeholder="예: 정왕동">
+</div>
+<div>
+<label for="category">카테고리</label>
+<input class="form-control" id="category" name="category" th:value="${category}" maxlength="100" placeholder="예: 채소">
+</div>
+<div class="ui-search-actions">
+<button type="submit" class="btn btn-success">검색</button>
+<a th:href="@{/group-purchases}">초기화</a>
+</div>
+</form>
+<section id="catalog">
+<div class="ui-results-head">
+<h2>모집 중인 공동구매 <small th:text="${purchases.totalElements} + '건'">0건</small>
+</h2>
+<small>최신 등록순 · 가까운 매장에서 수령</small>
+</div>
+<div class="ui-catalog" th:if="${!purchases.empty}">
+<article class="ui-product" th:each="item : ${purchases.content}">
+<div class="ui-product-media">
+<img data-product-image th:if="${item.imageUrl != null and !#strings.isEmpty(item.imageUrl)}" th:src="@{${item.imageUrl}}" th:alt="${item.productName}" loading="lazy">
+<div data-image-fallback class="ui-media-placeholder" th:if="${item.imageUrl == null or #strings.isEmpty(item.imageUrl)}">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+<path d="m5 9 4-6m10 6-4-6M3 9h18l-2 11H5L3 9Z"/>
+<path d="M9 12v5m6-5v5"/>
+</svg>
+<span>등록된 상품 사진 없음</span>
+</div>
+<span class="ui-pill">모집 중</span>
+</div>
+<div class="ui-product-body">
+<p class="ui-product-shop" th:text="${item.storeName}">동네 매장</p>
+<h3>
+<a th:href="@{/group-purchases/{id}(id=${item.id})}" th:text="${item.title}">상품 제목</a>
+</h3>
+<p class="ui-product-subtitle">
+<span th:text="${item.productName}">상품명</span> · <span th:text="${item.category}">카테고리</span>
+</p>
+<div class="ui-price">
+<span th:text="${#numbers.formatInteger(item.groupPrice,1,'COMMA')}">0</span>원<small th:text="'/ ' + ${item.unit}">/ 개</small>
+</div>
+<div class="ui-meter" aria-hidden="true">
+<span th:style="|width:${item.progressPercent}%|">
+</span>
+</div>
+<div class="ui-product-progress">
+<span>
+<b th:text="${item.currentQuantity}">0</b> / <span th:text="${item.targetQuantity}">0</span>
+모집</span>
+<strong th:text="|${item.progressPercent}%|">0%</strong>
+</div>
+<div class="ui-product-bottom">
+<span th:text="${#temporals.format(item.endAt,'MM.dd HH:mm')} + ' 마감'">마감일</span>
+<a th:href="@{/group-purchases/{id}(id=${item.id})}" th:aria-label="${item.title} + ' 상세 보기'">상세 보기 ↗</a>
+</div>
+</div>
+</article>
+</div>
+<div class="ui-empty" th:if="${purchases.empty}">
+<h2>조건에 맞는 공동구매가 없어요.</h2>
+<p class="ui-muted">다른 검색어로 찾아보거나 전체 목록을 확인해 보세요.</p>
+<a class="btn btn-outline-success" th:href="@{/group-purchases}">전체 목록 보기</a>
+</div>
+<nav class="ui-pagination" aria-label="목록 페이지" th:if="${purchases.totalPages > 1 or purchases.number > 0}">
+<a th:if="${purchases.number > 0}" th:href="@{/group-purchases(q=${q},district=${district},category=${category},page=${purchases.number - 1})}">← 이전</a>
+<span th:if="${purchases.totalPages > purchases.number}" th:text="|${purchases.number + 1} / ${purchases.totalPages}|">1 / 1</span>
+<a th:if="${purchases.hasNext()}" th:href="@{/group-purchases(q=${q},district=${district},category=${category},page=${purchases.number + 1})}">다음 →</a>
+</nav>
+</section>
 </main>
-<div th:replace="~{group-purchases/fragments :: footer}"></div>
+<div th:replace="~{fragments/ui :: footer}">
+</div>
 </body>
 </html>

@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 <body>
-<span th:fragment="bell" sec:authorize="isAuthenticated()" class="notification-bell-wrap">
+<div th:fragment="bell" sec:authorize="isAuthenticated()" class="notification-bell-wrap">
     <input type="hidden" class="notification-csrf-token" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
     <button class="btn btn-outline-success btn-sm position-relative notification-bell-button"
             type="button" aria-expanded="false" aria-label="알림 열기" aria-controls="notificationPopover">
-        <span aria-hidden="true">🔔</span><span class="notification-bell-label">알림</span>
+        <span aria-hidden="true">🔔</span> <span class="notification-bell-label">알림</span>
         <span class="notification-unread-count badge rounded-pill text-bg-danger ms-1 d-none" aria-live="polite">0</span>
     </button>
     <div id="notificationPopoverBackdrop" class="notification-popover-backdrop" aria-hidden="true"></div>
@@ -30,8 +30,6 @@
             </footer>
         </div>
     </section>
-    <link rel="stylesheet" th:href="@{/css/notifications.css}">
-    <script th:src="@{/js/notifications.js}" defer></script>
-</span>
+</div>
 </body>
 </html>

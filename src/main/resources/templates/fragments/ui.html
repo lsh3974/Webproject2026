@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+<th:block th:fragment="assets">
+<script th:src="@{/js/ui.js}">
+</script>
+<link rel="stylesheet" th:href="@{/css/vendor/bootstrap.min.css}">
+<link rel="stylesheet" th:href="@{/css/market.css}">
+<th:block sec:authorize="isAuthenticated()">
+<link rel="stylesheet" th:href="@{/css/notifications.css}">
+<script th:src="@{/js/notifications.js}" defer></script>
+</th:block>
+</th:block>
+</head>
+<body>
+<div th:fragment="buyerHeader">
+<a class="ui-skip" href="#main">본문으로 건너뛰기</a>
+<header class="ui-header">
+<div class="container ui-header-inner">
+<a class="ui-brand" th:href="@{/}">
+<span class="ui-brand-symbol">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+<path d="m5 9 4-6m10 6-4-6M3 9h18l-2 11H5L3 9Z"/>
+<path d="M9 12v5m6-5v5"/>
+</svg>
+</span>
+<span>
+<strong>시흥한바구니</strong>
+<small>OUR NEIGHBORHOOD MARKET</small>
+</span>
+</a>
+<nav class="ui-nav" aria-label="주 메뉴">
+<a th:href="@{/}">홈</a>
+<a th:href="@{/group-purchases}">공동구매 둘러보기</a>
+<a sec:authorize="isAuthenticated()" th:href="@{/orders}">내 주문·예약</a>
+</nav>
+<div class="ui-account">
+<div th:replace="~{notifications/fragments :: bell}"></div>
+<span class="ui-account-name" sec:authorize="isAuthenticated()">
+<strong th:text="${#authentication.principal.displayName}">회원</strong>님</span>
+<a sec:authorize="hasRole('SELLER')" th:href="@{/seller/stores}" class="btn btn-outline-success btn-sm">판매자 센터</a>
+<form sec:authorize="isAuthenticated()" th:action="@{/logout}" method="post">
+<button class="btn btn-outline-secondary btn-sm" type="submit">로그아웃</button>
+</form>
+<a sec:authorize="isAnonymous()" th:href="@{/login}">로그인</a>
+<a sec:authorize="isAnonymous()" class="btn btn-success btn-sm" th:href="@{/signup}">회원가입</a>
+</div>
+</div>
+</header>
+</div>
+<div th:fragment="sellerHeader(store)">
+<a class="ui-skip" href="#main">본문으로 건너뛰기</a>
+<header class="ui-header">
+<div class="container ui-header-inner">
+<a class="ui-brand" th:href="@{/}">
+<span class="ui-brand-symbol">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+<path d="m5 9 4-6m10 6-4-6M3 9h18l-2 11H5L3 9Z"/>
+<path d="M9 12v5m6-5v5"/>
+</svg>
+</span>
+<span>
+<strong>시흥한바구니</strong>
+<small>OUR NEIGHBORHOOD MARKET</small>
+</span>
+</a>
+<span class="ui-seller-label">판매자 센터</span>
+<nav class="ui-nav" aria-label="판매자 메뉴">
+<a th:href="@{/seller/stores}">내 매장</a>
+<a th:if="${store != null}" th:href="@{/seller/stores/{id}/products(id=${store.id})}">상품 관리</a>
+<a th:if="${store != null}" th:href="@{/seller/stores/{id}/group-purchases(id=${store.id})}">공동구매 관리</a>
+<a th:if="${store != null}" th:href="@{/seller/stores/{id}/pickups(id=${store.id})}">매장 수령</a>
+</nav>
+<div class="ui-account">
+<div th:replace="~{notifications/fragments :: bell}"></div>
+<a th:href="@{/group-purchases}">구매자 화면 ↗</a>
+<form th:action="@{/logout}" method="post">
+<button type="submit" class="btn btn-outline-secondary btn-sm">로그아웃</button>
+</form>
+</div>
+</div>
+</header>
+</div>
+<div th:fragment="notificationHeader">
+<th:block sec:authorize="hasRole('SELLER')">
+<div th:replace="~{fragments/ui :: sellerHeader(null)}"></div>
+</th:block>
+<th:block sec:authorize="!hasRole('SELLER')">
+<div th:replace="~{fragments/ui :: buyerHeader}"></div>
+</th:block>
+</div>
+<footer class="ui-footer" th:fragment="footer">
+<div class="container ui-footer-inner">
+<div>
+<strong>시흥한바구니</strong>우리 동네에서 함께 고르는 좋은 장보기.</div>
+<div>
+<a th:href="@{/}">홈으로</a> · <a th:href="@{/group-purchases}">공동구매 둘러보기</a>
+<br>가까운 매장에서 만나요.</div>
+</div>
+</footer>
+</body>
+</html>
