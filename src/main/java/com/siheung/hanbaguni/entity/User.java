@@ -40,6 +40,9 @@ public class User {
     @Column(name = "email_verified_at")
     private LocalDateTime emailVerifiedAt;
 
+    @Column(name = "phone_verified_at")
+    private LocalDateTime phoneVerifiedAt;
+
     @Column(name = "withdrawn_at")
     private LocalDateTime withdrawnAt;
 

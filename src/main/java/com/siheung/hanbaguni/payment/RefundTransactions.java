@@ -26,15 +26,18 @@ public class RefundTransactions {
     private final OrderRepository orders;
     private final GroupPurchaseRepository groups;
     private final PickupRepository pickups;
+    private final com.siheung.hanbaguni.notification.NotificationEventService notificationEvents;
 
     public RefundTransactions(
             OrderRepository orders,
             GroupPurchaseRepository groups,
-            PickupRepository pickups
+            PickupRepository pickups,
+            com.siheung.hanbaguni.notification.NotificationEventService notificationEvents
     ) {
         this.orders = orders;
         this.groups = groups;
         this.pickups = pickups;
+        this.notificationEvents = notificationEvents;
     }
 
     // 구매자가 모집 중인 본인 주문을 취소합니다.
@@ -143,6 +146,8 @@ public class RefundTransactions {
         }
 
         order.completeRefund(attempt.refundRequestId());
+        // Toss 전액 취소가 검증되고 주문이 REFUNDED로 바뀐 뒤에만 완료 알림을 기록합니다.
+        notificationEvents.refundCompleted(order);
 
         // 환불 완료 시 수령증 취소
         pickups.findByOrderId(order.getId()).ifPresent(p -> {

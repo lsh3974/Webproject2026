@@ -32,6 +32,7 @@
 
         <div sec:authorize="isAuthenticated()"
              class="d-flex align-items-center gap-3">
+            <span th:replace="~{notifications/fragments :: bell}"></span>
             <!-- 8번 기능: 내 주문·수량 예약 내역 링크 -->
             <a th:href="@{/orders}" class="btn btn-outline-primary btn-sm">
                 내 주문·예약

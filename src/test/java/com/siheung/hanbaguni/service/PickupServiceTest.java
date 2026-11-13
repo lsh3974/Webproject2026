@@ -44,6 +44,9 @@ class PickupServiceTest {
     @Mock
     private jakarta.persistence.EntityManager entityManager;
 
+    @Mock
+    private com.siheung.hanbaguni.notification.NotificationEventService notificationEvents;
+
     @InjectMocks
     private PickupService pickupService;
 

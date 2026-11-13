@@ -34,8 +34,10 @@
 - 판매자 공동구매 모집 등록, 초안 저장(DRAFT), 정식 게시(OPEN), 수정 및 삭제 관리 (6번 기능)
 - 구매자 공동구매 탐색·조회 (7번 기능)
 - 공동구매 주문 수량 예약, 동시성 선점 제어, 타임아웃 만료 및 예약 취소 (8번 기능)
-
-결제(9번) 기능은 다음 단계로 연동 예정입니다.
+- Toss 선결제, 승인 결과 재확인 및 복구 (9번 기능)
+- 공동구매 자동 마감, 실패 환불 및 재처리 (10번 기능)
+- 매장 수령 관리 및 QR 수령 확인 (11번 기능)
+- 거래 상태 변경 알림, 웹 알림함, 이메일·SOLAPI SMS·브라우저 푸시 (12번 기능)
 
 ## 1. Java 설정
 
@@ -105,6 +107,7 @@ Workbench에서 프로젝트 DB에 연결한 뒤 다음 파일을 순서대로 �
 10. `database/010-add-refund-pending.sql`: 환불 대기 상태 및 환불 요청 ID 추가 (10번 기능용)
 11. `database/011-add-payment-retry-at.sql`: 결제 승인 재시도 시각 추가 (9·10번 복구용)
 12. `database/012-create-pickups.sql`: 매장 수령 및 QR 수령증 테이블 생성 (11번 기능용)
+13. `database/013-create-notifications.sql`: 알림 Outbox, 웹 알림, 채널 설정·발송 기록 및 휴대전화 확인 시각 컬럼 생성 (12번 기능용)
 
 회원가입 및 매장/상품/공동구매 기능을 사용하기 전에 위 SQL을 순서대로 적용해야 합니다.
 파일을 GitHub에서 받는 것만으로 DB에 반영되지는 않습니다.
@@ -304,7 +307,7 @@ Settings → Build Tools → Maven → Maven home path를
 컨트롤러에서는 아래 매개변수 선언으로 받을 수 있습니다.
 
 ```java
-@AuthenticationPrincipal LoginUser loginUser
+@AuthenticationPrincipal LoginUser loginUser;
 ```
 
 필요한 import는 다음과 같습니다.
@@ -710,3 +713,178 @@ POST 요청은 Spring Security의 CSRF 검증을 유지합니다.
 - `PickupServiceTest`: 고유 수령 코드 생성, PAID 주문 대상 수령증 발급/조회, 매장 소유권 및 교차 검증, 환불 주문 수령 차단 등 단위 테스트 8개 통과
 - `SellerPickupIntegrationTest`: 판매자 수령 목록 렌더링, QR 스캔/조회(전화번호 마스킹), 준비완료(READY), QR 스캔 수령완료(PICKED_UP), 수령 완료 후 환불 차단(409 CONFLICT), 타 매장 조작 차단(400) 통합 테스트 10개 통과. 모집 성공 전 수령, 준비완료 건너뛰기, 늦은 준비완료 저장, 동시 발급을 회귀 테스트로 검증
 - **전체 프로젝트 테스트 (`mvnw test`)**: 결제, 환불, 동시성 선점, 공구 마감 등 **전체 132개 테스트 통과**
+
+## 12번 알림 기능
+
+### 지원 알림 및 수신자
+
+| 이벤트 | 구매자 | 판매자 |
+|---|---|---|
+| 결제 완료 | 해당 주문 상세 | 해당 매장 주문·수령 관리 화면 |
+| 모집 성공 | PAID 주문이 있는 구매자의 내 주문 | 해당 매장 공동구매 관리 |
+| 모집 실패 | 환불 대상 구매자의 내 주문에 `환불 예정` 안내 | 해당 매장 공동구매 관리 |
+| 환불 완료 | Toss 전액 취소 확인 후 주문 상세 | 해당 매장 주문·수령 관리 화면 |
+| 수령 가능 | 매장 및 수령 기간을 포함한 주문 상세/QR 안내 | - |
+| 수령 완료 | 주문 상세 | 해당 매장 수령 관리 |
+
+- 모집 결과 이벤트는 PAID 주문자만 대상으로 합니다. 예약만 한 주문, 취소·환불된 주문은 대상에서 제외합니다.
+- 모집 성공 후 늦게 PAID가 된 주문은 해당 구매자에게만 성공 알림을 추가합니다. 동일 구매자는 모집별 성공 알림을 한 번만 받습니다.
+- 모집 실패 알림은 환불 API 호출 시점이 아니라 모집 실패 확정 시점에 `환불 예정`으로 생성합니다. `환불 완료`는 Toss 전액 취소 확인과 DB의 `REFUNDED` 전환 이후에만 생성합니다.
+- 수령 알림은 실제 주문에 연결된 수령증에만 생성합니다. 판매자 시연용 가상 수령 건은 구매자 알림을 만들지 않습니다.
+
+### 웹 알림함
+
+- 로그인 사용자: `/notifications`
+- 수신 설정: `/notifications/preferences`
+- 상단 종 아이콘을 누르면 화면 중앙에 모달형 알림 팝오버가 열립니다. 배경은 어두워지고 패널은 위에서 펼쳐지는 애니메이션으로 표시되며, 목록은 내부 스크롤을 지원합니다. 읽지 않은 개수는 `/notifications/api/unread-count`에서 조회합니다.
+- 알림을 누르면 로그인 사용자 본인의 알림인지 확인한 뒤 읽음 처리하고, 저장된 내부 경로로 이동합니다. 다른 사용자의 알림 ID는 조회·읽음 처리할 수 없습니다.
+- `모두 읽음`은 사용자 소유 알림 전체를 DB 일괄 갱신합니다.
+- 웹 알림은 외부 채널 설정과 무관하게 항상 저장합니다.
+
+### DB 적용
+
+기존 001~012 적용을 완료한 DB에 다음 SQL을 한 번 실행합니다.
+
+```text
+database/013-create-notifications.sql
+```
+
+이 스크립트는 다음을 생성합니다.
+
+- `notification_events`: 거래 트랜잭션에서 저장하는 Outbox 이벤트 및 이벤트 키 중복 방지
+- `notifications`: 사용자 웹 알림함 및 읽음 상태
+- `notification_preferences`: 이메일·SMS·푸시 수신 설정(모두 기본 OFF)
+- `notification_push_subscriptions`: 브라우저별 Web Push 구독
+- `notification_deliveries`: 채널별 발송 상태, 시도 횟수, 제공사 메시지 ID, 오류 및 재확인 상태
+- `users.phone_verified_at`: SMS 발송 대상 휴대전화 확인 시각
+
+이미 013을 적용했다면 재실행하지 않습니다. 기존 데이터베이스 백업 후 적용하세요. `spring.jpa.hibernate.ddl-auto=none`이므로 애플리케이션이 테이블을 자동 생성하지 않습니다.
+
+### Outbox 및 발송 처리
+
+1. 결제·마감·환불·수령 트랜잭션 안에서 수신자별 `notification_events` 레코드를 저장합니다. 상태 변경이 롤백되면 이벤트도 함께 롤백됩니다.
+2. 커밋 이후 Outbox 처리기가 웹 알림과 사용 설정에 따른 채널별 발송 작업을 DB 트랜잭션으로 생성합니다.
+3. 외부 발송 작업은 별도 스케줄러가 실행합니다. 외부 채널 장애가 주문·결제·환불·수령 트랜잭션을 되돌리지 않습니다.
+4. 이벤트 키, 웹 알림 이벤트 키, 채널별 `(notification_id, channel, target_key)` UNIQUE 제약으로 중복을 방지합니다.
+5. 일시적인 재시도 가능 오류는 최대 5회, 지수형 대기(30초부터 최대 1시간)로 재시도합니다. 영구 오류는 `FAILED`, 제공사 접수 여부가 불명확한 건은 `UNKNOWN`, 발송 전에 사용자가 채널을 끈 건은 `SKIPPED`로 기록합니다.
+6. `UNKNOWN`은 무조건 재발송하지 않습니다. SOLAPI는 `customFields.notificationDeliveryId`를 포함해 전송하고 메시지 목록 조회로 최대 3회 접수 여부를 대조합니다. 그래도 확인되지 않으면 운영자가 제공사 내역을 확인해야 합니다. SMTP/Web Push에서 결과가 불명확하면 중복 방지를 위해 자동 재전송하지 않고 `UNKNOWN`으로 둡니다.
+7. 브라우저 Push가 404/410으로 구독 만료를 반환하면 해당 구독을 비활성화합니다. 기존 발송 이력은 보존합니다.\n8. Outbox 이벤트는 최대 50개 ID를 조회하되 이벤트별 `REQUIRES_NEW` 트랜잭션으로 독립 처리합니다. 한 이벤트 처리 실패는 해당 이벤트만 롤백하며, 별도 트랜잭션에서 시도 횟수와 오류를 기록합니다. 5회 실패 시 `FAILED`, 그 전에는 30초부터 지수형 대기 후 재시도합니다.
+
+스케줄 간섭을 줄이기 위해 기본 작업 스케줄러 풀 크기는 4입니다. `NOTIFICATIONS_ENABLED=false`로 실행하면 Outbox 이벤트의 웹 알림 변환 및 외부 채널 발송 스케줄러만 중지됩니다. 거래 상태 변경 트랜잭션은 계속 Outbox 이벤트를 저장하므로, 비활성화 기간에는 `notification_events`가 누적됩니다. 재활성화하면 누적 이벤트 처리가 재개됩니다. 장기간 중지해야 한다면 누적량과 재개 시 발송량을 운영자가 확인하세요.
+
+### 이메일(SMTP) 설정
+
+다음 환경변수를 설정합니다.
+
+| 변수 | 설명 |
+|---|---|
+| `MAIL_HOST` | SMTP 서버 호스트 (필수) |
+| `MAIL_PORT` | SMTP 포트(기본 587) |
+| `MAIL_USERNAME` | SMTP 계정 |
+| `MAIL_PASSWORD` | SMTP 비밀번호 또는 앱 비밀번호 |
+| `NOTIFICATION_EMAIL_FROM` | 발신 주소 |
+| `APP_BASE_URL` | 이메일 링크에 사용할 서비스 기본 URL |
+
+SMTP 연결·읽기·쓰기 타임아웃은 5초로 제한합니다. 수신 설정에서 이메일을 켜고, `users.email_verified_at`이 설정된 계정에만 발송합니다. 현재 프로젝트에는 이메일 주소 확인 절차 자체가 포함되어 있지 않으므로, 가입 주소를 자동으로 확인된 것으로 취급하지 않습니다. 실제 확인 절차를 별도로 운영한 뒤 확인 시각을 기록해야 합니다.
+
+### 문자(SOLAPI) 설정
+
+SOLAPI 콘솔에서 API Key / API Secret을 발급하고, 발신번호를 등록·인증한 뒤 다음 환경변수를 설정합니다.
+
+| 변수 | 설명 |
+|---|---|
+| `SOLAPI_API_KEY` | SOLAPI API Key |
+| `SOLAPI_API_SECRET` | SOLAPI API Secret |
+| `SOLAPI_FROM` | SOLAPI에 등록된 발신번호(숫자만 입력 권장) |
+
+문자 수신 설정을 켜고 `users.phone_verified_at`이 설정된 사용자에게만 발송합니다. 번호는 E.164 형식(예: `+821012345678`) 저장을 권장합니다. 현재 프로젝트에는 SMS 인증번호 발송·검증 UI가 없으므로, 소유권을 실제로 확인하지 않은 번호에 확인 시각을 설정하지 마세요.
+
+SOLAPI는 HMAC-SHA256 인증을 사용합니다. SMS/LMS 본문은 UTF-8 기준 1,800바이트 이내로 안전하게 제한합니다. 발송 응답이 유실되면 `notificationDeliveryId` 사용자 정의 필드로 메시지 목록을 조회합니다. 조회에서도 확인되지 않으면 중복 발송 방지를 위해 자동 재전송하지 않고 `UNKNOWN`으로 남깁니다.
+
+### 브라우저 푸시(Web Push) 설정
+
+1. VAPID 키를 생성합니다. Node.js 환경에서 `npx web-push generate-vapid-keys`를 실행할 수 있습니다.
+2. 다음 환경변수를 설정합니다.
+
+| 변수 | 설명 |
+|---|---|
+| `PUSH_VAPID_PUBLIC_KEY` | VAPID 공개키(Base64 URL-safe) |
+| `PUSH_VAPID_PRIVATE_KEY` | VAPID 개인키 |
+| `PUSH_VAPID_SUBJECT` | 운영자 연락처(예: `mailto:admin@example.com`) |
+| `APP_BASE_URL` | 서비스 기본 URL. 실제 서비스는 HTTPS 사용 |
+
+3. 로그인 후 `/notifications/preferences`에서 푸시 수신을 켭니다.
+4. `이 브라우저에서 푸시 켜기`를 눌러 브라우저 권한을 허용하고 구독을 등록합니다.
+5. 이벤트가 발생하면 등록된 활성 브라우저 구독 각각에 푸시를 전송합니다.
+
+푸시는 HTTPS에서 동작합니다. 브라우저 로컬 개발의 `localhost`는 브라우저 보안 예외로 지원되지만, 실제 다른 기기에서 접속할 때는 유효한 HTTPS 도메인이 필요합니다. 로그아웃 시 현재 브라우저의 endpoint만 서버에서 비활성화하고 브라우저 구독도 해제합니다. 같은 계정으로 등록된 다른 기기의 구독은 유지됩니다. 같은 브라우저에서 다른 계정이 푸시를 등록하면 구독 소유권을 현재 로그인 계정으로 이전합니다. 이로써 계정 간 409 충돌을 피합니다. 푸시 알림 본문은 항상 `새 알림이 있어요. 로그인 후 확인해 주세요.`로 고정하고 링크도 `/notifications`로 제한해 공용 기기·잠금 화면에 주문 및 수령 세부정보가 노출되지 않도록 합니다. 사용자가 권한을 거절하거나 구독을 해제해도 웹 알림함은 계속 이용할 수 있습니다.
+
+### 채널 테스트 및 확인
+
+- 웹: 구매자/판매자 계정으로 결제·모집·환불·수령 이벤트를 발생시킨 뒤 `/notifications` 확인
+- 이메일: SMTP 설정, 확인된 테스트 이메일, 수신 설정 ON 후 결제 완료 등 테스트 이벤트 실행
+- SMS: SOLAPI 발신번호/API 키, 실제 확인된 테스트 휴대전화, 수신 설정 ON 후 테스트 이벤트 실행
+- Web Push: HTTPS 또는 localhost에서 브라우저 권한 허용 및 구독 등록 후 테스트 이벤트 실행
+
+알림 내부 로직의 집중 테스트는 다음 명령으로 실행할 수 있습니다.
+
+```bash
+./mvnw -Dtest=NotificationEventServiceTest,NotificationDeliveryTest,SolapiSmsNotificationSenderTest test
+```
+
+전체 회귀 테스트는 다음과 같습니다.
+
+```bash
+./mvnw test
+```
+
+자동 테스트에서 외부 제공사 네트워크를 실제 호출하지 않습니다. 외부 수신 확인은 각 개발자의 테스트 계정과 제공사 키를 설정한 뒤 별도로 수행해야 합니다. 이 작업 환경에서는 Maven Wrapper 배포 파일을 내려받지 못해 테스트 실행 결과를 확인하지 못했으므로, 실제 수신 및 전체 테스트 통과 여부를 완료한 것으로 표시하지 않습니다. 비밀키는 저장소에 커밋하지 마세요.
+
+발송 현황과 장애는 다음 SQL로 확인할 수 있습니다.
+
+```sql
+-- Outbox 이벤트 처리 상태
+SELECT id, event_key, event_type, recipient_user_id, status, attempt_count,
+       next_attempt_at, last_error, created_at, processed_at
+FROM notification_events
+ORDER BY id DESC;
+
+-- 채널별 발송 결과 및 운영자 대조가 필요한 UNKNOWN
+SELECT d.id, d.notification_id, d.channel, d.target_key, d.status,
+       d.attempt_count, d.reconciliation_count, d.provider_message_id,
+       d.last_error, d.next_attempt_at, d.sent_at, d.created_at
+FROM notification_deliveries d
+ORDER BY d.id DESC;
+```
+
+`SENT`는 제공사/SMTP가 요청을 접수한 상태를 뜻하며, 최종 단말 수신을 보장하지 않습니다. SOLAPI의 최종 전송 결과는 SOLAPI 메시지 발송 내역에서 확인해야 합니다. `FAILED`, `UNKNOWN`은 원인을 확인한 뒤 설정·연락처·제공사 내역을 점검하세요. `UNKNOWN`은 중복 발송 위험이 있어 자동 재전송되지 않습니다.
+
+### 관련 경로
+
+| 메서드 | 경로 | 기능 |
+|---|---|---|
+| GET | `/notifications` | 내 웹 알림함 |
+| POST | `/notifications/{id}/read` | 본인 알림 읽음 처리 후 내부 화면 이동 |
+| POST | `/notifications/read-all` | 본인 알림 전체 읽음 처리 |
+| GET | `/notifications/preferences` | 외부 채널 수신 설정 및 브라우저 푸시 등록 |
+| POST | `/notifications/preferences` | 외부 채널 설정 저장 |
+| GET | `/notifications/api/unread-count` | 읽지 않은 알림 개수 |
+| POST | `/notifications/api/push-subscriptions` | 브라우저 푸시 구독 등록/갱신 |
+| DELETE | `/notifications/api/push-subscriptions` | 현재 사용자 브라우저 구독 비활성화 |
+
+### 현재 구현 범위와 제한
+
+- 이메일·문자 주소의 확인 시각을 기준으로 발송 대상을 제한합니다. 다만 이메일/SMS 인증번호 발송 및 확인 UI는 이번 12번 범위에 포함하지 않았습니다.
+- 판매자 주문 관리 전용 페이지는 기존 프로젝트에 없으므로 결제·환불 판매자 알림은 해당 매장의 수령/주문 처리 화면(`/seller/stores/{storeId}/pickups`)으로 연결합니다.
+- 알림 이력은 최근 100건을 목록에 표시하며, `모두 읽음`은 전체 알림에 적용됩니다.\n- 헤더 팝오버는 최근 알림 6건을 표시하고, 배경 클릭 또는 Escape로 닫을 수 있습니다. `알림 전체 보기`를 통해 기존 `/notifications` 페이지도 계속 이용할 수 있습니다.
+- 자동 재조회에서 접수 여부를 확인할 수 없는 이메일·푸시 및 SOLAPI 조회 미확인 건은 `UNKNOWN`으로 남기며 운영자 확인이 필요합니다.
+- `SENT`는 전송 요청 접수 상태이며 실제 수신을 뜻하지 않습니다.
+
+
+
+### 푸시 구독의 기기별 로그아웃 및 소유권 검증
+
+- 로그아웃 요청에는 현재 브라우저의 Push endpoint만 `pushEndpoint`로 전달하며, 서버는 해당 계정이 소유한 endpoint만 비활성화합니다. 같은 계정의 다른 브라우저/기기 구독은 유지됩니다.
+- 브라우저의 `PushSubscription`도 로그아웃 과정에서 해제합니다. 다음 계정이 같은 브라우저에서 푸시를 등록하면 기존 endpoint의 소유권이 새 계정으로 이전됩니다.
+- 발송 대기 중인 PUSH delivery는 실제 전송 직전에 현재 구독 소유자와 알림 수신자가 일치하고 구독이 활성 상태인지 다시 확인합니다. 불일치하거나 구독이 비활성화된 경우 `SKIPPED` 처리하며 외부 푸시 서비스를 호출하지 않습니다.
+- 푸시 본문은 계속해서 거래 상세정보 없이 로그인 후 알림함을 확인하라는 일반 문구만 사용합니다.
